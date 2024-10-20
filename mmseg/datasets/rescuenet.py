@@ -26,17 +26,16 @@ class RescueNetDataset(BaseSegDataset):
     )
 
     def __init__(self,
-                 ann_file,
                  img_suffix='.jpg',
                  seg_map_suffix='_lab.png',
+                 reduce_zero_label=True,
                  **kwargs) -> None:
         super().__init__(
             img_suffix=img_suffix,
             seg_map_suffix=seg_map_suffix,
-            ann_file=ann_file,
+            reduce_zero_label=reduce_zero_label,
             **kwargs)
 
         # Ensure image and annotation paths exist
         assert fileio.exists(self.data_prefix['img_path'],
                              self.backend_args), "Image path not found."
-        assert osp.isfile(self.ann_file), "Annotation file not found."
