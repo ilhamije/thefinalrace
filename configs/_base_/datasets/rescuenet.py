@@ -1,6 +1,7 @@
 # dataset settings
 dataset_type = 'RescueNetDataset'
-data_root = 'data/rescuenet'
+data_root = 'data/rescuenet/'
+
 crop_size = (512, 512)
 train_pipeline = [
     dict(type='LoadImageFromFile'),
