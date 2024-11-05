@@ -2,7 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from mmseg.registry import MODELS
 
+
+@MODELS.register_module()
 class MSCANShift(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(MSCANShift, self).__init__()

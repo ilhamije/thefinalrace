@@ -12,25 +12,17 @@ class RescueNetDataset(BaseSegDataset):
     Args:
         split (str): Split txt file for the dataset (e.g., 'train', 'val').
     """
-    from collections import OrderedDict
-
-    color_encoding = OrderedDict([
-        ('unlabeled', (0, 0, 0)),
-        ('water', (61, 230, 250)),
-        ('building-no-damage', (180, 120, 120)),
-        ('building-medium-damage', (235, 255, 7)),
-        ('building-major-damage', (255, 184, 6)),
-        ('building-total-destruction', (255, 0, 0)),
-        ('vehicle', (255, 0, 245)),
-        ('road-clear', (140, 140, 140)),
-        ('road-blocked', (160, 150, 20)),
-        ('tree', (4, 250, 7)),
-        ('pool', (255, 235, 0))
-    ])
-
     METAINFO = dict(
-        classes=tuple(color_encoding.keys()),
-        palette=list(color_encoding.values())
+        classes=(
+            'background', 'water', 'building_no_damage', 'building_minor_damage',
+            'building_major_damage', 'building_total_destruction', 'road_clear',
+            'road_blocked', 'vehicle', 'tree', 'pool'
+        ),
+        palette=[
+            [0, 0, 0], [61, 230, 250], [180, 120, 120], [235, 255, 7],
+            [255, 184, 6], [255, 0, 0], [140, 140, 140],
+            [160, 150, 20], [255, 0, 245], [4, 250, 7], [255, 235, 0]
+        ]
     )
 
     def __init__(self,

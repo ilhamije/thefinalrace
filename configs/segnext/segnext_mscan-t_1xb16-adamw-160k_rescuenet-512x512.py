@@ -38,7 +38,11 @@ model = dict(
         channels=256,
         ham_channels=256,
         dropout_ratio=0.1,
+<<<<<<< HEAD
         num_classes=11,
+=======
+        num_classes=150,
+>>>>>>> refs/remotes/origin/main
         norm_cfg=ham_norm_cfg,
         align_corners=False,
         loss_decode=dict(

@@ -2,8 +2,8 @@ import os
 import shutil
 
 # Define paths for the old and new structures
-source_root = "RescueNet"
-destination_root = "RescueNet-Converted"
+source_root = "ori-rescuenet"
+destination_root = "rescuenet"
 
 # Define target directories for images and annotations
 img_dir = os.path.join(destination_root, "img_dir")
