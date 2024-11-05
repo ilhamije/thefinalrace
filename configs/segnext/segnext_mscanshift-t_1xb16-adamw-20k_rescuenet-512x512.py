@@ -1,10 +1,10 @@
 _base_ = [
-    '../_base_/default_runtime.py', '../_base_/schedules/schedule_160k.py',
-    '../_base_/datasets/ade20k.py'
+    '../_base_/default_runtime.py', '../_base_/schedules/schedule_20k.py',
+    '../_base_/datasets/rescuenet.py'
 ]
 # model settings
-checkpoint_file = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segnext/mscan_t_20230227-119e8c9f.pth'  # noqa
-ham_norm_cfg = dict(type='GN', num_groups=32, requires_grad=True)
+# checkpoint_file = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segnext/mscan_t_20230227-119e8c9f.pth'  # noqa
+ham_norm_cfg = dict(type='GN', num_groups=16, requires_grad=True)
 crop_size = (512, 512)
 data_preprocessor = dict(
     type='SegDataPreProcessor',
@@ -20,8 +20,8 @@ model = dict(
     data_preprocessor=data_preprocessor,
     pretrained=None,
     backbone=dict(
-        type='MSCAN',
-        init_cfg=dict(type='Pretrained', checkpoint=checkpoint_file),
+        type='MSCANShift',
+        # init_cfg=dict(type='Pretrained', checkpoint=checkpoint_file),
         embed_dims=[32, 64, 160, 256],
         mlp_ratios=[8, 8, 4, 4],
         drop_rate=0.0,
@@ -55,8 +55,8 @@ model = dict(
     test_cfg=dict(mode='whole'))
 
 # dataset settings
-# train_dataloader = dict(batch_size=16)
-train_dataloader = dict(batch_size=8, num_workers=1, pin_memory=True)
+# train_dataloader = dict(batch_size=16, num_workers=0)
+train_dataloader = dict(batch_size=4, num_workers=2, pin_memory=True)
 
 # optimizer
 optim_wrapper = dict(

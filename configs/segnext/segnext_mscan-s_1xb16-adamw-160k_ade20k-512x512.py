@@ -17,7 +17,7 @@ model = dict(
         ham_channels=256,
         ham_kwargs=dict(MD_R=16),
         dropout_ratio=0.1,
-        num_classes=150,
+        num_classes=11,
         norm_cfg=ham_norm_cfg,
         align_corners=False,
         loss_decode=dict(

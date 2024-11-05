@@ -1,6 +1,6 @@
 _base_ = [
     '../_base_/default_runtime.py', '../_base_/schedules/schedule_160k.py',
-    '../_base_/datasets/ade20k.py'
+    '../_base_/datasets/rescuenet.py'
 ]
 # model settings
 checkpoint_file = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segnext/mscan_t_20230227-119e8c9f.pth'  # noqa
@@ -38,7 +38,7 @@ model = dict(
         channels=256,
         ham_channels=256,
         dropout_ratio=0.1,
-        num_classes=150,
+        num_classes=11,
         norm_cfg=ham_norm_cfg,
         align_corners=False,
         loss_decode=dict(
@@ -55,8 +55,7 @@ model = dict(
     test_cfg=dict(mode='whole'))
 
 # dataset settings
-# train_dataloader = dict(batch_size=16)
-train_dataloader = dict(batch_size=8, num_workers=1, pin_memory=True)
+train_dataloader = dict(batch_size=8, num_workers=2, pin_memory=True)
 
 # optimizer
 optim_wrapper = dict(
