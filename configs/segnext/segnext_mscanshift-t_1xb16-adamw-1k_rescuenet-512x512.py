@@ -1,10 +1,10 @@
 _base_ = [
-    '../_base_/default_runtime.py', '../_base_/schedules/schedule_160k.py',
+    '../_base_/default_runtime.py', '../_base_/schedules/schedule_1k.py',
     '../_base_/datasets/rescuenet.py'
 ]
 # model settings
 checkpoint_file = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segnext/mscan_t_20230227-119e8c9f.pth'  # noqa
-ham_norm_cfg = dict(type='GN', num_groups=32, requires_grad=True)
+ham_norm_cfg = dict(type='GN', num_groups=16, requires_grad=True)
 crop_size = (512, 512)
 data_preprocessor = dict(
     type='SegDataPreProcessor',
@@ -42,7 +42,12 @@ model = dict(
         norm_cfg=ham_norm_cfg,
         align_corners=False,
         loss_decode=dict(
-            type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
+            type='CrossEntropyLoss',
+            use_sigmoid=False,
+            loss_weight=1.0,
+            class_weight=[0.5, 1.0, 2.0, 3.0,
+                          3.0, 5.0, 1.0, 1.0, 1.0, 2.0, 3.0]
+        ),
         ham_kwargs=dict(
             MD_S=1,
             MD_R=16,
@@ -55,6 +60,7 @@ model = dict(
     test_cfg=dict(mode='whole'))
 
 # dataset settings
+# train_dataloader = dict(batch_size=16, num_workers=0)
 train_dataloader = dict(batch_size=4, num_workers=2, pin_memory=True)
 
 # optimizer
