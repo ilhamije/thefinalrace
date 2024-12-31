@@ -15,19 +15,36 @@ from mmengine.model.weight_init import (constant_init, normal_init,
 from mmseg.registry import MODELS
 
 
-class ShiftOperation(nn.Module):
-    """Implements a partial shift operation for feature maps."""
+def debug_shapes(name):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            print(f"\n=== Entering {name} ===")
+            # Print input shapes
+            for i, arg in enumerate(args[1:]):  # Skip self
+                if isinstance(arg, torch.Tensor):
+                    print(f"Input {i} shape: {arg.shape}")
 
-    def __init__(self, shift_directions, shift_ratio=0.25):
-        """
-        Args:
-            shift_directions (list): List of (dx, dy) tuples representing shift directions.
-            shift_ratio (float): Ratio of channels to shift. Remaining channels are unshifted.
-        """
-        super(ShiftOperation, self).__init__()
+            result = func(*args, **kwargs)
+
+            # Print output shapes
+            if isinstance(result, torch.Tensor):
+                print(f"Output shape: {result.shape}")
+            elif isinstance(result, tuple):
+                for i, r in enumerate(result):
+                    if isinstance(r, torch.Tensor):
+                        print(f"Output {i} shape: {r.shape}")
+            print(f"=== Exiting {name} ===\n")
+            return result
+        return wrapper
+    return decorator
+
+
+class ShiftOperation(nn.Module):
+    def __init__(self, shift_directions=[(1, 0), (0, 1), (-1, 0), (0, -1)], shift_ratio=0.25):
+        super().__init__()
         self.shift_directions = shift_directions
         self.shift_ratio = shift_ratio
-        self.fc1 = None  # \(1 \times 1\) convolution for post-processing
+        self.fc1 = None
 
     def forward(self, x):
         """
@@ -41,7 +58,7 @@ class ShiftOperation(nn.Module):
         # Determine the number of shifted channels
         num_shifted_channels = int(C * self.shift_ratio)
 
-        # Dynamically ensure enough shift directions
+        # Create repeated directions if needed
         if len(self.shift_directions) < num_shifted_channels:
             repeat_times = num_shifted_channels // len(
                 self.shift_directions) + 1
@@ -49,31 +66,29 @@ class ShiftOperation(nn.Module):
         else:
             directions = self.shift_directions
 
-        # Trim to the required number of shifts
         directions = directions[:num_shifted_channels]
 
-        # Split the input tensor into shifted and unshifted channels
-        # First group of channels for shifting
+        # Split channels
         x_shifted = x[:, :num_shifted_channels, :, :]
-        # Remaining channels left unaltered
         x_unshifted = x[:, num_shifted_channels:, :, :]
 
-        # Apply shifts to the shifted channels
+        # Apply shifts
         shifted = []
         for i in range(num_shifted_channels):
             dx, dy = directions[i]
             shifted_map = torch.roll(
-                x_shifted[:, i:i + 1, :, :], shifts=(dx, dy), dims=(2, 3))
+                x_shifted[:, i:i+1, :, :], shifts=(dx, dy), dims=(2, 3))
             shifted.append(shifted_map)
 
-        # Concatenate shifted and unshifted channels
+        # Combine results
         shifted = torch.cat(shifted, dim=1)
         output = torch.cat([shifted, x_unshifted], dim=1)
 
-        # Optional \(1 \times 1\) convolution
+        # Apply 1x1 conv
         if self.fc1 is None:
             self.fc1 = nn.Conv2d(C, C, kernel_size=1, bias=False).to(x.device)
         output = self.fc1(output)
+
         return output
 
 
@@ -340,17 +355,38 @@ class MSCABlock(BaseModule):
             layer_scale_init_value * torch.ones(channels), requires_grad=True)
 
     def forward(self, x, H, W):
-        """Forward function."""
-
+        # print(f"\n--- MSCABlock ---")
+        # print(f"Input: x={x.shape}, H={H}, W={W}")
         B, N, C = x.shape
+
+        # Check if dimensions match
+        if N != H * W:
+            print(f"WARNING: N ({N}) != H*W ({H*W})")
+
         x = x.permute(0, 2, 1).view(B, C, H, W)
-        x = x + self.drop_path(
-            self.layer_scale_1.unsqueeze(-1).unsqueeze(-1) *
-            self.attn(self.norm1(x)))
-        x = x + self.drop_path(
-            self.layer_scale_2.unsqueeze(-1).unsqueeze(-1) *
-            self.mlp(self.norm2(x)))
+        # print(f"After reshape to BCHW: {x.shape}")
+
+        # Attention branch
+        identity = x
+        x = self.norm1(x)
+        # print(f"After norm1: {x.shape}")
+        x = self.attn(x)
+        # print(f"After attention: {x.shape}")
+        x = identity + \
+            self.drop_path(self.layer_scale_1.unsqueeze(-1).unsqueeze(-1) * x)
+
+        # MLP branch
+        identity = x
+        x = self.norm2(x)
+        # print(f"After norm2: {x.shape}")
+        x = self.mlp(x)
+        # print(f"After MLP: {x.shape}")
+        x = identity + \
+            self.drop_path(self.layer_scale_2.unsqueeze(-1).unsqueeze(-1) * x)
+
+        # Reshape back
         x = x.view(B, C, N).permute(0, 2, 1)
+        # print(f"Final output: {x.shape}")
         return x
 
 
@@ -496,38 +532,46 @@ class MSCANShift(BaseModule):
 
     def init_weights(self):
         """Initialize modules of MSCAN."""
-
-        print('init cfg', self.init_cfg)
-        if self.init_cfg is None:
+        if self.init_cfg is not None:
+            # Load the checkpoint with strict=False to ignore mismatched layers
+            checkpoint = torch.hub.load_state_dict_from_url(
+                self.init_cfg['checkpoint'], map_location=torch.device('cpu'))
+            self.load_state_dict(checkpoint, strict=False)
+        else:
             for m in self.modules():
                 if isinstance(m, nn.Linear):
-                    trunc_normal_init(m, std=.02, bias=0.)
+                    trunc_normal_init(m, std=0.02, bias=0.0)
                 elif isinstance(m, nn.LayerNorm):
-                    constant_init(m, val=1.0, bias=0.)
+                    constant_init(m, val=1.0, bias=0.0)
                 elif isinstance(m, nn.Conv2d):
-                    fan_out = m.kernel_size[0] * m.kernel_size[
-                        1] * m.out_channels
+                    fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
                     fan_out //= m.groups
-                    normal_init(
-                        m, mean=0, std=math.sqrt(2.0 / fan_out), bias=0)
-        else:
-            super().init_weights()
+                    normal_init(m, mean=0, std=math.sqrt(2.0 / fan_out), bias=0.0)
+
 
     def forward(self, x):
-        """Forward function."""
-
+        # print(f"\n=== MSCANShift input shape: {x.shape} ===")
         B = x.shape[0]
         outs = []
 
         for i in range(self.num_stages):
+            # print(f"\n=== Stage {i+1} ===")
             patch_embed = getattr(self, f'patch_embed{i + 1}')
             block = getattr(self, f'block{i + 1}')
             norm = getattr(self, f'norm{i + 1}')
             x, H, W = patch_embed(x)
-            for blk in block:
+            # print(f"After patch_embed: x={x.shape}, H={H}, W={W}")
+
+            for j, blk in enumerate(block):
+                # print(f"Before block {j+1}: {x.shape}")
                 x = blk(x, H, W)
+                # print(f"After block {j+1}: {x.shape}")
+
             x = norm(x)
+            # print(f"After norm: {x.shape}")
             x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
+            # print(f"After reshape: {x.shape}")
             outs.append(x)
+            # print(f"Stage {i+1} output shape: {x.shape}")
 
         return outs

@@ -2,13 +2,13 @@
 dataset_type = 'RescueNetDataset'
 data_root = 'data/rescuenet/'
 
-crop_size = (512, 512)
+crop_size = (512, 1024)
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', reduce_zero_label=True),
     dict(
         type='RandomResize',
-        scale=(1024,768),
+        scale=(4000,3000),
         ratio_range=(0.5, 2.0),
         keep_ratio=True),
     dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
@@ -18,7 +18,7 @@ train_pipeline = [
 ]
 test_pipeline = [
     dict(type='LoadImageFromFile'),
-    dict(type='Resize', scale=(2048, 512), keep_ratio=True),
+    dict(type='Resize', scale=(4000, 3000), keep_ratio=True),
     # add loading annotation after ``Resize`` because ground truth
     # does not need to do resize data transform
     dict(type='LoadAnnotations', reduce_zero_label=True),
@@ -41,8 +41,8 @@ tta_pipeline = [
         ])
 ]
 train_dataloader = dict(
-    batch_size=4,
-    num_workers=4,
+    batch_size=2,
+    num_workers=3,
     persistent_workers=True,
     sampler=dict(type='InfiniteSampler', shuffle=True),
     dataset=dict(
