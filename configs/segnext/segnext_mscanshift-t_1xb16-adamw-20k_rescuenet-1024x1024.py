@@ -3,9 +3,10 @@ _base_ = [
     '../_base_/datasets/rescuenet.py'
 ]
 # model settings
-checkpoint_file = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segnext/mscan_t_20230227-119e8c9f.pth'  # noqa
-ham_norm_cfg = dict(type='GN', num_groups=16, requires_grad=True)
-crop_size = (512, 512)
+# checkpoint_file = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segnext/mscan_t_20230227-119e8c9f.pth'  # noqa
+checkpoint_file = 'pretrained/segnext/mscan_t_20230227-119e8c9f.pth'
+ham_norm_cfg = dict(type='GN', num_groups=32, requires_grad=True)
+crop_size = (1024, 1024)
 data_preprocessor = dict(
     type='SegDataPreProcessor',
     mean=[123.675, 116.28, 103.53],
@@ -13,7 +14,7 @@ data_preprocessor = dict(
     bgr_to_rgb=True,
     pad_val=0,
     seg_pad_val=255,
-    size=(512, 512),
+    size=(1024, 1024),
     test_cfg=dict(size_divisor=32))
 model = dict(
     type='EncoderDecoder',
@@ -21,15 +22,16 @@ model = dict(
     pretrained=None,
     backbone=dict(
         type='MSCANShift',
-        # Ensure this matches pre-trained model dimensions
+        init_cfg=dict(type='Pretrained', checkpoint=checkpoint_file),
         embed_dims=[32, 64, 160, 256],
-        depths=[3, 3, 5, 2],
-        mlp_ratios=[8, 8, 4, 4],  # Match original ratios if pre-trained
+        mlp_ratios=[8, 8, 4, 4],
         drop_rate=0.0,
         drop_path_rate=0.1,
-        num_stages=4,
-        init_cfg=dict(type='Pretrained', checkpoint=checkpoint_file),
-    ),
+        depths=[3, 3, 5, 2],
+        attention_kernel_sizes=[5, [1, 7], [1, 11], [1, 21]],
+        attention_kernel_paddings=[2, [0, 3], [0, 5], [0, 10]],
+        act_cfg=dict(type='GELU'),
+        norm_cfg=dict(type='BN', requires_grad=True)),
     decode_head=dict(
         type='LightHamHead',
         in_channels=[64, 160, 256],
@@ -54,10 +56,10 @@ model = dict(
     test_cfg=dict(mode='whole'))
 
 # dataset settings
-# train_dataloader = dict(batch_size=16, num_workers=0)
-train_dataloader = dict(batch_size=4, num_workers=1, pin_memory=True)
+# train_dataloader = dict(batch_size=16)
+train_dataloader = dict(batch_size=8, num_workers=1, pin_memory=True)
 
-# Optimizer
+# optimizer
 optim_wrapper = dict(
     _delete_=True,
     type='OptimWrapper',

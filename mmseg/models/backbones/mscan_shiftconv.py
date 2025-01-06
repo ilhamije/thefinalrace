@@ -15,29 +15,6 @@ from mmengine.model.weight_init import (constant_init, normal_init,
 from mmseg.registry import MODELS
 
 
-def debug_shapes(name):
-    def decorator(func):
-        def wrapper(*args, **kwargs):
-            print(f"\n=== Entering {name} ===")
-            # Print input shapes
-            for i, arg in enumerate(args[1:]):  # Skip self
-                if isinstance(arg, torch.Tensor):
-                    print(f"Input {i} shape: {arg.shape}")
-
-            result = func(*args, **kwargs)
-
-            # Print output shapes
-            if isinstance(result, torch.Tensor):
-                print(f"Output shape: {result.shape}")
-            elif isinstance(result, tuple):
-                for i, r in enumerate(result):
-                    if isinstance(r, torch.Tensor):
-                        print(f"Output {i} shape: {r.shape}")
-            print(f"=== Exiting {name} ===\n")
-            return result
-        return wrapper
-    return decorator
-
 class ShiftOperation(nn.Module):
     """Implements a partial shift operation for feature maps."""
 
@@ -363,36 +340,36 @@ class MSCABlock(BaseModule):
             layer_scale_init_value * torch.ones(channels), requires_grad=True)
 
     def forward(self, x, H, W):
-        print(f"\n--- MSCABlock ---")
-        print(f"Input: x={x.shape}, H={H}, W={W}")
+        # print(f"\n--- MSCABlock ---")
+        # print(f"Input: x={x.shape}, H={H}, W={W}")
         B, N, C = x.shape
 
         # Check if dimensions match
-        if N != H * W:
-            print(f"WARNING: N ({N}) != H*W ({H*W})")
+        # if N != H * W:
+            # print(f"WARNING: N ({N}) != H*W ({H*W})")
 
         x = x.permute(0, 2, 1).view(B, C, H, W)
-        print(f"After reshape to BCHW: {x.shape}")
+        # print(f"After reshape to BCHW: {x.shape}")
 
         # Attention branch
         identity = x
         x = self.norm1(x)
-        print(f"After norm1: {x.shape}")
+        # print(f"After norm1: {x.shape}")
         x = self.attn(x)
-        print(f"After attention: {x.shape}")
+        # print(f"After attention: {x.shape}")
         x = identity + self.drop_path(self.layer_scale_1.unsqueeze(-1).unsqueeze(-1) * x)
 
         # MLP branch
         identity = x
         x = self.norm2(x)
-        print(f"After norm2: {x.shape}")
+        # print(f"After norm2: {x.shape}")
         x = self.mlp(x)
-        print(f"After MLP: {x.shape}")
+        # print(f"After MLP: {x.shape}")
         x = identity + self.drop_path(self.layer_scale_2.unsqueeze(-1).unsqueeze(-1) * x)
 
         # Reshape back
         x = x.view(B, C, N).permute(0, 2, 1)
-        print(f"Final output: {x.shape}")
+        # print(f"Final output: {x.shape}")
         return x
 
 
@@ -536,48 +513,51 @@ class MSCANShift(BaseModule):
             setattr(self, f'block{i + 1}', block)
             setattr(self, f'norm{i + 1}', norm)
 
-    def init_weights(self):
-        """Initialize modules of MSCAN."""
+    def load_pretrained_weights(self, pretrained=None):
+        """Load pretrained weights with key filtering."""
+        if pretrained:
+            checkpoint = torch.load(pretrained, map_location='cpu')
+            state_dict = checkpoint['state_dict'] if 'state_dict' in checkpoint else checkpoint
 
-        print('init cfg', self.init_cfg)
-        if self.init_cfg is None:
-            for m in self.modules():
-                if isinstance(m, nn.Linear):
-                    trunc_normal_init(m, std=.02, bias=0.)
-                elif isinstance(m, nn.LayerNorm):
-                    constant_init(m, val=1.0, bias=0.)
-                elif isinstance(m, nn.Conv2d):
-                    fan_out = m.kernel_size[0] * m.kernel_size[
-                        1] * m.out_channels
-                    fan_out //= m.groups
-                    normal_init(
-                        m, mean=0, std=math.sqrt(2.0 / fan_out), bias=0)
+            model_dict = self.state_dict()
+            # Filter out unnecessary keys and missing weights
+            filtered_state_dict = {k: v for k,
+                                   v in state_dict.items() if k in model_dict}
+            model_dict.update(filtered_state_dict)
+            self.load_state_dict(model_dict)
+        else:
+            print("No pretrained weights provided, initializing randomly.")
+
+    def init_weights(self):
+        """Initialize weights or load pretrained."""
+        if self.init_cfg and 'checkpoint' in self.init_cfg:
+            self.load_pretrained_weights(self.init_cfg['checkpoint'])
         else:
             super().init_weights()
 
     def forward(self, x):
-        print(f"\n=== MSCANShift input shape: {x.shape} ===")
+        # print(f"\n=== MSCANShift input shape: {x.shape} ===")
         B = x.shape[0]
         outs = []
 
         for i in range(self.num_stages):
-            print(f"\n=== Stage {i+1} ===")
+            # print(f"\n=== Stage {i+1} ===")
             patch_embed = getattr(self, f'patch_embed{i + 1}')
             block = getattr(self, f'block{i + 1}')
             norm = getattr(self, f'norm{i + 1}')
             x, H, W = patch_embed(x)
-            print(f"After patch_embed: x={x.shape}, H={H}, W={W}")
+            # print(f"After patch_embed: x={x.shape}, H={H}, W={W}")
 
             for j, blk in enumerate(block):
-                print(f"Before block {j+1}: {x.shape}")
+                # print(f"Before block {j+1}: {x.shape}")
                 x = blk(x, H, W)
-                print(f"After block {j+1}: {x.shape}")
+                # print(f"After block {j+1}: {x.shape}")
 
             x = norm(x)
-            print(f"After norm: {x.shape}")
+            # print(f"After norm: {x.shape}")
             x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
-            print(f"After reshape: {x.shape}")
+            # print(f"After reshape: {x.shape}")
             outs.append(x)
-            print(f"Stage {i+1} output shape: {x.shape}")
+            # print(f"Stage {i+1} output shape: {x.shape}")
 
         return outs
