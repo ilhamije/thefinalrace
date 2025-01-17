@@ -1,5 +1,5 @@
 _base_ = [
-    '../_base_/default_runtime.py', '../_base_/schedules/schedule_20k.py',
+    '../_base_/default_runtime.py', '../_base_/schedules/schedule_1k.py',
     '../_base_/datasets/rescuenet.py'
 ]
 # model settings
@@ -20,7 +20,7 @@ model = dict(
     data_preprocessor=data_preprocessor,
     pretrained=None,
     backbone=dict(
-        type='MSCAN',
+        type='MSCANShift',
         init_cfg=dict(type='Pretrained', checkpoint=checkpoint_file),
         embed_dims=[32, 64, 160, 256],
         mlp_ratios=[8, 8, 4, 4],
@@ -42,7 +42,12 @@ model = dict(
         norm_cfg=ham_norm_cfg,
         align_corners=False,
         loss_decode=dict(
-            type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
+            type='CrossEntropyLoss',
+            use_sigmoid=False,
+            loss_weight=1.0,
+            class_weight=[0.5, 1.0, 2.0, 3.0,
+                          3.0, 5.0, 1.0, 1.0, 1.0, 2.0, 3.0]
+        ),
         ham_kwargs=dict(
             MD_S=1,
             MD_R=16,
@@ -56,9 +61,7 @@ model = dict(
 
 # dataset settings
 # train_dataloader = dict(batch_size=16, num_workers=0)
-train_dataloader = dict(batch_size=2, num_workers=2)
-val_dataloader = dict(batch_size=1, num_workers=4)
-test_dataloader = val_dataloader
+train_dataloader = dict(batch_size=4, num_workers=2)
 
 # optimizer
 optim_wrapper = dict(
@@ -85,3 +88,4 @@ param_scheduler = [
         by_epoch=False,
     )
 ]
+

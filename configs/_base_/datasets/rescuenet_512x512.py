@@ -3,7 +3,7 @@ dataset_type = 'RescueNetDataset'
 data_root = 'data/rescuenet/'
 
 # Adjusted crop size and image scale for memory optimization
-crop_size = (769, 769)
+crop_size = (512, 512)
 img_scale = (2000, 1500)
 
 train_pipeline = [

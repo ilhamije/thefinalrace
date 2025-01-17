@@ -14,14 +14,14 @@ class RescueNetDataset(BaseSegDataset):
     """
     METAINFO = dict(
         classes=(
-            'background', 'water', 'building_no_damage', 'building_minor_damage',
-            'building_major_damage', 'building_total_destruction', 'road_clear',
-            'road_blocked', 'vehicle', 'tree', 'pool'
+            'background', 'water', 'building-no-damage', 'building-medium-damage',
+            'building-major-damage', 'building-total-destruction', 'vehicle',
+            'road-clear', 'road-blocked', 'tree', 'pool'
         ),
         palette=[
             [0, 0, 0], [61, 230, 250], [180, 120, 120], [235, 255, 7],
-            [255, 184, 6], [255, 0, 0], [140, 140, 140],
-            [160, 150, 20], [255, 0, 245], [4, 250, 7], [255, 235, 0]
+            [255, 184, 6], [255, 0, 0], [255, 0, 245],
+            [140, 140, 140], [160, 150, 20], [4, 250, 7], [255, 235, 0]
         ]
     )
 

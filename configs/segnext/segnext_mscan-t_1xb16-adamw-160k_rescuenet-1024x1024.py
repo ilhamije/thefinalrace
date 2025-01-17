@@ -1,11 +1,11 @@
 _base_ = [
-    '../_base_/default_runtime.py', '../_base_/schedules/schedule_20k.py',
+    '../_base_/default_runtime.py', '../_base_/schedules/schedule_160k.py',
     '../_base_/datasets/rescuenet.py'
 ]
 # model settings
-checkpoint_file = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segnext/mscan_t_20230227-119e8c9f.pth'  # noqa
-ham_norm_cfg = dict(type='GN', num_groups=16, requires_grad=True)
-crop_size = (512, 512)
+# checkpoint_file = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segnext/mscan_t_20230227-119e8c9f.pth'  # noqa
+checkpoint_file = 'pretrained/segnext/mscan_t_20230227-119e8c9f.pth'
+ham_norm_cfg = dict(type='GN', num_groups=32, requires_grad=True)
 data_preprocessor = dict(
     type='SegDataPreProcessor',
     mean=[123.675, 116.28, 103.53],
@@ -13,8 +13,12 @@ data_preprocessor = dict(
     bgr_to_rgb=True,
     pad_val=0,
     seg_pad_val=255,
-    size=(512, 512),
-    test_cfg=dict(size_divisor=32))
+    size=(4000, 3000),
+    test_cfg = dict(
+        size_divisor=32,
+        mode='sliding_window',  # Enable patch-based inference
+        stride=(768, 768)  # Set the stride for overlapping patches
+    ))
 model = dict(
     type='EncoderDecoder',
     data_preprocessor=data_preprocessor,
@@ -55,10 +59,8 @@ model = dict(
     test_cfg=dict(mode='whole'))
 
 # dataset settings
-# train_dataloader = dict(batch_size=16, num_workers=0)
-train_dataloader = dict(batch_size=2, num_workers=2)
-val_dataloader = dict(batch_size=1, num_workers=4)
-test_dataloader = val_dataloader
+# train_dataloader = dict(batch_size=6)
+train_dataloader = dict(batch_size=1, num_workers=4)
 
 # optimizer
 optim_wrapper = dict(
@@ -85,3 +87,4 @@ param_scheduler = [
         by_epoch=False,
     )
 ]
+
