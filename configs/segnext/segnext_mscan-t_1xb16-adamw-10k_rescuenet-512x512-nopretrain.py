@@ -1,5 +1,5 @@
 _base_ = [
-    '../_base_/default_runtime.py', '../_base_/schedules/schedule_20k.py',
+    '../_base_/default_runtime.py', '../_base_/schedules/schedule_10k.py',
     '../_base_/datasets/rescuenet.py'
 ]
 # model settings
@@ -20,7 +20,7 @@ model = dict(
     data_preprocessor=data_preprocessor,
     pretrained=None,
     backbone=dict(
-        type='MSCANShift',
+        type='MSCAN',
         # init_cfg=dict(type='Pretrained', checkpoint=checkpoint_file),
         embed_dims=[32, 64, 160, 256],
         mlp_ratios=[8, 8, 4, 4],
@@ -56,7 +56,7 @@ model = dict(
 
 # dataset settings
 # train_dataloader = dict(batch_size=16, num_workers=0)
-train_dataloader = dict(batch_size=4, num_workers=2, pin_memory=True)
+train_dataloader = dict(batch_size=1, num_workers=4)
 
 # optimizer
 optim_wrapper = dict(

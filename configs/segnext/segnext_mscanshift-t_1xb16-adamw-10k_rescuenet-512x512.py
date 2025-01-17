@@ -3,7 +3,7 @@ _base_ = [
     '../_base_/datasets/rescuenet.py'
 ]
 # model settings
-# checkpoint_file = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segnext/mscan_t_20230227-119e8c9f.pth'  # noqa
+checkpoint_file = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segnext/mscan_t_20230227-119e8c9f.pth'  # noqa
 ham_norm_cfg = dict(type='GN', num_groups=16, requires_grad=True)
 crop_size = (512, 512)
 data_preprocessor = dict(
@@ -21,14 +21,14 @@ model = dict(
     pretrained=None,
     backbone=dict(
         type='MSCANShift',
-        # init_cfg=dict(type='Pretrained', checkpoint=checkpoint_file),
+        init_cfg=dict(type='Pretrained', checkpoint=checkpoint_file),
         embed_dims=[32, 64, 160, 256],
         mlp_ratios=[8, 8, 4, 4],
         drop_rate=0.0,
         drop_path_rate=0.1,
         depths=[3, 3, 5, 2],
-        # attention_kernel_sizes=[5, [1, 7], [1, 11], [1, 21]],
-        # attention_kernel_paddings=[2, [0, 3], [0, 5], [0, 10]],
+        attention_kernel_sizes=[5, [1, 7], [1, 11], [1, 21]],
+        attention_kernel_paddings=[2, [0, 3], [0, 5], [0, 10]],
         act_cfg=dict(type='GELU'),
         norm_cfg=dict(type='BN', requires_grad=True)),
     decode_head=dict(
