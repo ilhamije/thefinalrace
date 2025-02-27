@@ -55,7 +55,7 @@ train_dataloader = dict(
         type=dataset_type,
         data_root=data_root,
         data_prefix=dict(
-            img_path='leftImg8bit/train', seg_map_path='gtFine/train'),
+            img_path='img_dir/train', seg_map_path='ann_dir/train'),
         pipeline=train_pipeline))
 val_dataloader = dict(
     batch_size=1,
@@ -66,9 +66,33 @@ val_dataloader = dict(
         type=dataset_type,
         data_root=data_root,
         data_prefix=dict(
-            img_path='leftImg8bit/val', seg_map_path='gtFine/val'),
+            img_path='img_dir/val',
+            seg_map_path='ann_dir/val'),
         pipeline=test_pipeline))
-test_dataloader = val_dataloader
 
 val_evaluator = dict(type='IoUMetric', iou_metrics=['mIoU'])
-test_evaluator = val_evaluator
+
+# test_evaluator = val_evaluator
+# test_dataloader = val_dataloader
+
+test_evaluator = dict(
+    type='IoUMetric',
+    iou_metrics=['mIoU'],
+    format_only=True,
+    output_dir='work_dirs/format_results')
+test_dataloader = dict(
+    batch_size=1,
+    num_workers=4,
+    persistent_workers=True,
+    sampler=dict(type='DefaultSampler', shuffle=False),
+    dataset=dict(
+        type=dataset_type,
+        data_root=data_root,
+        data_prefix=dict(
+            img_path='img_dir/test', seg_map_path='ann_dir/test'),
+        # we don't load annotation in test transform pipeline.
+        pipeline=[
+            dict(type='LoadImageFromFile'),
+            dict(type='Resize', scale=img_scale, keep_ratio=True),
+            dict(type='PackSegInputs')
+        ]))

@@ -1,148 +1,69 @@
-# Copyright (c) OpenMMLab. All rights reserved.
-# Originally from https://github.com/visual-attention-network/segnext
-# Licensed under the Apache License, Version 2.0 (the "License")
+"""
+This module contains the implementation of the MSCANShift backbone for the SegNeXt model.
+"""
+
 import math
 import warnings
 
 import torch
-import torch.nn as nn
+from torch import nn
 from mmcv.cnn import build_activation_layer, build_norm_layer
 from mmcv.cnn.bricks import DropPath
 from mmengine.model import BaseModule
-from mmengine.model.weight_init import (constant_init, normal_init,
-                                        trunc_normal_init)
+from mmengine.model.weight_init import (constant_init, normal_init, trunc_normal_init)
 
 from mmseg.registry import MODELS
 
 
-class ShiftOperation(nn.Module):
-    """Implements a partial shift operation for feature maps."""
-
-    def __init__(self, shift_directions, shift_ratio=0.25):
-        """
-        Args:
-            shift_directions (list): List of (dx, dy) tuples representing shift directions.
-            shift_ratio (float): Ratio of channels to shift. Remaining channels are unshifted.
-        """
-        super(ShiftOperation, self).__init__()
-        self.shift_directions = shift_directions
-        self.shift_ratio = shift_ratio
-        self.fc1 = None  # \(1 \times 1\) convolution for post-processing
-
-    def forward(self, x):
-        """
-        Args:
-            x (Tensor): Input tensor of shape (B, C, H, W).
-        Returns:
-            Tensor: Shifted tensor with the same shape.
-        """
-        B, C, H, W = x.size()
-
-        # Determine the number of shifted channels
-        num_shifted_channels = int(C * self.shift_ratio)
-
-        # Dynamically ensure enough shift directions
-        if len(self.shift_directions) < num_shifted_channels:
-            repeat_times = num_shifted_channels // len(
-                self.shift_directions) + 1
-            directions = self.shift_directions * repeat_times
-        else:
-            directions = self.shift_directions
-
-        # Trim to the required number of shifts
-        directions = directions[:num_shifted_channels]
-
-        # Split the input tensor into shifted and unshifted channels
-        # First group of channels for shifting
-        x_shifted = x[:, :num_shifted_channels, :, :]
-        # Remaining channels left unaltered
-        x_unshifted = x[:, num_shifted_channels:, :, :]
-
-        # Apply shifts to the shifted channels
-        shifted = []
-        for i in range(num_shifted_channels):
-            dx, dy = directions[i]
-            shifted_map = torch.roll(
-                x_shifted[:, i:i + 1, :, :], shifts=(dx, dy), dims=(2, 3))
-            shifted.append(shifted_map)
-
-        # Concatenate shifted and unshifted channels
-        shifted = torch.cat(shifted, dim=1)
-        output = torch.cat([shifted, x_unshifted], dim=1)
-
-        # Optional \(1 \times 1\) convolution
-        if self.fc1 is None:
-            self.fc1 = nn.Conv2d(C, C, kernel_size=1, bias=False).to(x.device)
-        output = self.fc1(output)
-        return output
-
-
 class Mlp(BaseModule):
-    """
-    MLP With Shift
+    """Multi Layer Perceptron (MLP) Module.
+
     Args:
-        in_features (int): Number of input features.
-        hidden_features (int, optional): Number of hidden features. Defaults to `in_features`.
-        out_features (int, optional): Number of output features. Defaults to `in_features`.
-        act_cfg (dict, optional): Config for activation layer. Defaults to `dict(type='GELU')`.
-        drop (float, optional): Dropout rate after the second convolution. Defaults to 0.0.
-        use_shift (bool, optional): Whether to use ShiftOperation. Defaults to True.
-        shift_directions (list, optional): Directions for shifting. Defaults to 4 common directions.
-        shift_ratio (float, optional): Ratio of channels to shift in the ShiftOperation. Defaults to 0.25.
+        in_features (int): The dimension of input features.
+        hidden_features (int): The dimension of hidden features.
+            Defaults: None.
+        out_features (int): The dimension of output features.
+            Defaults: None.
+        act_cfg (dict): Config dict for activation layer in block.
+            Default: dict(type='GELU').
+        drop (float): The number of dropout rate in MLP block.
+            Defaults: 0.0.
     """
 
     def __init__(self,
                  in_features,
                  hidden_features=None,
                  out_features=None,
-                 act_cfg=dict(type='GELU'),
-                 drop=0.,
-                 use_shift=True,
-                 shift_directions=None,
-                 shift_ratio=0.25):
+                 act_cfg={"type": 'GELU'},
+                 drop=0.0):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
-
-        # \(1 \times 1\) pointwise convolution
-        self.fc1 = nn.Conv2d(in_features, hidden_features, kernel_size=1)
-
-        # Optional ShiftOperation
-        self.use_shift = use_shift
-        if self.use_shift:
-            self.shift = ShiftOperation(
-                shift_directions=shift_directions or [
-                    (1, 0), (0, 1), (-1, 0), (0, -1)],
-                shift_ratio=shift_ratio
-            )
-
-        # Depthwise convolution for spatial mixing
+        self.fc1 = nn.Conv2d(in_features, hidden_features, 1)
         self.dwconv = nn.Conv2d(
-            hidden_features, hidden_features, kernel_size=3, padding=1, groups=hidden_features, bias=True
-        )
-
-        # Activation, final pointwise convolution, and dropout
+            hidden_features,
+            hidden_features,
+            3,
+            1,
+            1,
+            bias=True,
+            groups=hidden_features)
         self.act = build_activation_layer(act_cfg)
-        self.fc2 = nn.Conv2d(hidden_features, out_features, kernel_size=1)
+        self.fc2 = nn.Conv2d(hidden_features, out_features, 1)
         self.drop = nn.Dropout(drop)
 
     def forward(self, x):
-        # First pointwise transformation
+        """Forward function."""
+
         x = self.fc1(x)
 
-        # Optional shift operation
-        if self.use_shift:
-            x = self.shift(x)
-
-        # Depthwise convolution for spatial mixing
         x = self.dwconv(x)
-
-        # Activation, dropout, and final transformation
         x = self.act(x)
         x = self.drop(x)
         x = self.fc2(x)
-        return x
+        x = self.drop(x)
 
+        return x
 
 
 class StemConv(BaseModule):
@@ -160,8 +81,8 @@ class StemConv(BaseModule):
     def __init__(self,
                  in_channels,
                  out_channels,
-                 act_cfg=dict(type='GELU'),
-                 norm_cfg=dict(type='SyncBN', requires_grad=True)):
+                 act_cfg={"type": 'GELU'},
+                 norm_cfg={"type": 'SyncBN', "requires_grad": True}):
         super().__init__()
 
         self.proj = nn.Sequential(
@@ -186,7 +107,7 @@ class StemConv(BaseModule):
         """Forward function."""
 
         x = self.proj(x)
-        _, _, H, W = x.size()
+        _, _, height, width = x.size()
         x = x.flatten(2).transpose(1, 2)
         return x, H, W
 
@@ -205,8 +126,12 @@ class MSCAAttention(BaseModule):
 
     def __init__(self,
                  channels,
-                 kernel_sizes=[5, [1, 7], [1, 11], [1, 21]],
-                 paddings=[2, [0, 3], [0, 5], [0, 10]]):
+                         kernel_sizes=None,
+                         paddings=None):
+        if kernel_sizes is None:
+            kernel_sizes = [5, [1, 7], [1, 11], [1, 21]]
+        if paddings is None:
+            paddings = [2, [0, 3], [0, 5], [0, 10]]
         super().__init__()
         self.conv0 = nn.Conv2d(
             channels,
@@ -258,118 +183,116 @@ class MSCAAttention(BaseModule):
         return x
 
 
-class MSCASpatialAttention(nn.Module):
-    """Spatial Attention module leveraging shift convolution."""
-
-    def __init__(self, channels, shift_directions=[(1, 0), (0, 1), (-1, 0), (0, -1)], shift_ratio=0.25):
-        """
-        Args:
-            channels (int): Number of input channels.
-            shift_directions (list): List of (dx, dy) tuples for shifting.
-            shift_ratio (float): Ratio of channels to shift.
-        """
-        super(MSCASpatialAttention, self).__init__()
-        self.shift = ShiftOperation(
-            shift_directions=shift_directions, shift_ratio=shift_ratio)
-        self.pointwise = nn.Conv2d(
-            channels, channels, kernel_size=1, bias=False)
-        self.norm = nn.BatchNorm2d(channels)
-        self.act = nn.ReLU()
-
-    def forward(self, x):
-        x = self.shift(x)  # Apply spatial shift
-        x = self.pointwise(x)  # Aggregate shifted features
-        x = self.norm(x)
-        x = self.act(x)
-        return x
-
-
-
-class MSCABlock(BaseModule):
-    """Basic Multi-Scale Convolutional Attention Block. It leverage the large-
-    kernel attention (LKA) mechanism to build both channel and spatial
-    attention. In each branch, it uses two depth-wise strip convolutions to
-    approximate standard depth-wise convolutions with large kernels. The kernel
-    size for each branch is set to 7, 11, and 21, respectively.
+class MSCASpatialAttention(BaseModule):
+    """Spatial Attention Module in Multi-Scale Convolutional Attention Module
+    (MSCA).
 
     Args:
-        channels (int): The dimension of channels.
+        in_channels (int): The dimension of channels.
         attention_kernel_sizes (list): The size of attention
             kernel. Defaults: [5, [1, 7], [1, 11], [1, 21]].
         attention_kernel_paddings (list): The number of
             corresponding padding value in attention module.
             Defaults: [2, [0, 3], [0, 5], [0, 10]].
-        mlp_ratio (float): The ratio of multiple input dimension to
-            calculate hidden feature in MLP layer. Defaults: 4.0.
-        drop (float): The number of dropout rate in MLP block.
-            Defaults: 0.0.
-        drop_path (float): The ratio of drop paths.
-            Defaults: 0.0.
         act_cfg (dict): Config dict for activation layer in block.
             Default: dict(type='GELU').
-        norm_cfg (dict): Config dict for normalization layer.
-            Defaults: dict(type='SyncBN', requires_grad=True).
+    """
+
+    def __init__(self,
+                 in_channels,
+                 attention_kernel_sizes=[5, [1, 7], [1, 11], [1, 21]],
+                 attention_kernel_paddings=[2, [0, 3], [0, 5], [0, 10]],
+                 act_cfg=dict(type='GELU')):
+        super().__init__()
+        self.proj_1 = nn.Conv2d(in_channels, in_channels, 1)
+        self.activation = build_activation_layer(act_cfg)
+        self.spatial_gating_unit = MSCAAttention(in_channels,
+                                                 attention_kernel_sizes,
+                                                 attention_kernel_paddings)
+        self.proj_2 = nn.Conv2d(in_channels, in_channels, 1)
+
+    def forward(self, x):
+        """Forward function."""
+
+        shorcut = x.clone()
+        x = self.proj_1(x)
+        x = self.activation(x)
+        x = self.spatial_gating_unit(x)
+        x = self.proj_2(x)
+        x = x + shorcut
+        return x
+
+
+class ShiftBlock(BaseModule):
+    """Basic Shift Convolution Block.
+
+    This block replaces MSCAN mechanisms with a shift operation for spatial
+    feature mixing, followed by depth-wise convolution and a point-wise convolution.
+
+    Args:
+        channels (int): The dimension of channels.
+        shift_size (int): Number of pixels to shift. Defaults: 1.
+        mlp_ratio (float): The ratio of multiple input dimension to calculate
+                           hidden features in the MLP layer. Defaults: 4.0.
+        drop (float): The dropout rate in MLP block. Defaults: 0.0.
+        drop_path (float): The ratio of drop paths. Defaults: 0.0.
+        act_cfg (dict): Config dict for activation layer in block. Default: dict(type='GELU').
+        norm_cfg (dict): Config dict for normalization layer. Defaults: dict(type='SyncBN', requires_grad=True).
     """
 
     def __init__(self,
                  channels,
-                 attention_kernel_sizes=[5, [1, 7], [1, 11], [1, 21]],
-                 attention_kernel_paddings=[2, [0, 3], [0, 5], [0, 10]],
+                 shift_size=1,
                  mlp_ratio=4.,
                  drop=0.,
                  drop_path=0.,
                  act_cfg=dict(type='GELU'),
                  norm_cfg=dict(type='SyncBN', requires_grad=True)):
         super().__init__()
+        self.shift_size = shift_size
         self.norm1 = build_norm_layer(norm_cfg, channels)[1]
-        # self.attn = MSCASpatialAttention(channels, attention_kernel_sizes, attention_kernel_paddings, act_cfg)
-        self.attn = MSCASpatialAttention(channels)
-        self.drop_path = DropPath(
-            drop_path) if drop_path > 0. else nn.Identity()
+        self.dwconv = nn.Conv2d(
+            channels, channels, kernel_size=3, stride=1, padding=1, groups=channels)
+        self.pointwise_conv = nn.Conv2d(channels, channels, kernel_size=1)
+        self.act = build_activation_layer(act_cfg)
+
+        self.drop_path = nn.Identity() if drop_path <= 0 else DropPath(drop_path)
         self.norm2 = build_norm_layer(norm_cfg, channels)[1]
+
         mlp_hidden_channels = int(channels * mlp_ratio)
         self.mlp = Mlp(
             in_features=channels,
             hidden_features=mlp_hidden_channels,
             act_cfg=act_cfg,
             drop=drop)
+
         layer_scale_init_value = 1e-2
         self.layer_scale_1 = nn.Parameter(
             layer_scale_init_value * torch.ones(channels), requires_grad=True)
         self.layer_scale_2 = nn.Parameter(
             layer_scale_init_value * torch.ones(channels), requires_grad=True)
 
+    def shift(self, x):
+        """Apply shift operation."""
+        B, C, H, W = x.size()
+        shift_x = torch.roll(x, shifts=(-self.shift_size, -self.shift_size), dims=(2, 3))
+        shift_x[:, :, :self.shift_size, :] = 0
+        shift_x[:, :, :, :self.shift_size] = 0
+        return shift_x
+
     def forward(self, x, H, W):
-        # print(f"\n--- MSCABlock ---")
-        # print(f"Input: x={x.shape}, H={H}, W={W}")
+        """Forward function."""
         B, N, C = x.shape
-
-        # Check if dimensions match
-        # if N != H * W:
-            # print(f"WARNING: N ({N}) != H*W ({H*W})")
-
         x = x.permute(0, 2, 1).view(B, C, H, W)
-        # print(f"After reshape to BCHW: {x.shape}")
 
-        # Attention branch
-        identity = x
-        x = self.norm1(x)
-        # print(f"After norm1: {x.shape}")
-        x = self.attn(x)
-        # print(f"After attention: {x.shape}")
-        x = identity + self.drop_path(self.layer_scale_1.unsqueeze(-1).unsqueeze(-1) * x)
+        # Apply shift operation
+        shifted_x = self.shift(x)
+        x = self.dwconv(shifted_x)
+        x = self.act(self.pointwise_conv(x))
 
-        # MLP branch
-        identity = x
-        x = self.norm2(x)
-        # print(f"After norm2: {x.shape}")
-        x = self.mlp(x)
-        # print(f"After MLP: {x.shape}")
-        x = identity + self.drop_path(self.layer_scale_2.unsqueeze(-1).unsqueeze(-1) * x)
-
-        # Reshape back
+        x = x + self.drop_path(self.layer_scale_1.unsqueeze(-1).unsqueeze(-1) * self.norm1(x))
+        x = x + self.drop_path(self.layer_scale_2.unsqueeze(-1).unsqueeze(-1) * self.mlp(self.norm2(x)))
         x = x.view(B, C, N).permute(0, 2, 1)
-        # print(f"Final output: {x.shape}")
         return x
 
 
@@ -457,18 +380,15 @@ class MSCANShift(BaseModule):
                  mlp_ratios=[4, 4, 4, 4],
                  drop_rate=0.,
                  drop_path_rate=0.,
-                 depths=[3, 4, 6, 3],
-                 num_stages=4,
-                 attention_kernel_sizes=[5, [1, 7], [1, 11], [1, 21]],
-                 attention_kernel_paddings=[2, [0, 3], [0, 5], [0, 10]],
-                 act_cfg=dict(type='GELU'),
-                 norm_cfg=dict(type='SyncBN', requires_grad=True),
+                 act_cfg={"type": 'GELU'},
+                 norm_cfg={"type": 'SyncBN', "requires_grad": True},
                  pretrained=None,
                  init_cfg=None):
+
         super().__init__(init_cfg=init_cfg)
 
-        assert not (init_cfg and pretrained), \
-            'init_cfg and pretrained cannot be set at the same time'
+        assert not (init_cfg and pretrained)
+        self.init_cfg = {"type": 'Pretrained', "checkpoint": pretrained}
         if isinstance(pretrained, str):
             warnings.warn('DeprecationWarning: pretrained is deprecated, '
                           'please use "init_cfg" instead')
@@ -496,13 +416,12 @@ class MSCANShift(BaseModule):
                     norm_cfg=norm_cfg)
 
             block = nn.ModuleList([
-                MSCABlock(
+                ShiftBlock(
                     channels=embed_dims[i],
-                    attention_kernel_sizes=attention_kernel_sizes,
-                    attention_kernel_paddings=attention_kernel_paddings,
+                    shift_size=1,
                     mlp_ratio=mlp_ratios[i],
                     drop=drop_rate,
-                    drop_path=dpr[cur + j],
+                    drop_path_rate=dpr[cur + j],
                     act_cfg=act_cfg,
                     norm_cfg=norm_cfg) for j in range(depths[i])
             ])
@@ -513,51 +432,40 @@ class MSCANShift(BaseModule):
             setattr(self, f'block{i + 1}', block)
             setattr(self, f'norm{i + 1}', norm)
 
-    def load_pretrained_weights(self, pretrained=None):
-        """Load pretrained weights with key filtering."""
-        if pretrained:
-            checkpoint = torch.load(pretrained, map_location='cpu')
-            state_dict = checkpoint['state_dict'] if 'state_dict' in checkpoint else checkpoint
-
-            model_dict = self.state_dict()
-            # Filter out unnecessary keys and missing weights
-            filtered_state_dict = {k: v for k,
-                                   v in state_dict.items() if k in model_dict}
-            model_dict.update(filtered_state_dict)
-            self.load_state_dict(model_dict)
-        else:
-            print("No pretrained weights provided, initializing randomly.")
-
     def init_weights(self):
-        """Initialize weights or load pretrained."""
-        if self.init_cfg and 'checkpoint' in self.init_cfg:
-            self.load_pretrained_weights(self.init_cfg['checkpoint'])
+        """Initialize modules of MSCAN."""
+
+        print('init cfg', self.init_cfg)
+        if self.init_cfg is None:
+            for m in self.modules():
+                if isinstance(m, nn.Linear):
+                    trunc_normal_init(m, std=.02, bias=0.)
+                elif isinstance(m, nn.LayerNorm):
+                    constant_init(m, val=1.0, bias=0.)
+                elif isinstance(m, nn.Conv2d):
+                    fan_out = m.kernel_size[0] * m.kernel_size[
+                        1] * m.out_channels
+                    fan_out //= m.groups
+                    normal_init(
+                        m, mean=0, std=math.sqrt(2.0 / fan_out), bias=0)
         else:
             super().init_weights()
-
+        batch_size = x.shape[0]
     def forward(self, x):
-        # print(f"\n=== MSCANShift input shape: {x.shape} ===")
+        """Forward function."""
+
         B = x.shape[0]
         outs = []
 
-        for i in range(self.num_stages):
-            # print(f"\n=== Stage {i+1} ===")
-            patch_embed = getattr(self, f'patch_embed{i + 1}')
-            block = getattr(self, f'block{i + 1}')
-            norm = getattr(self, f'norm{i + 1}')
-            x, H, W = patch_embed(x)
-            # print(f"After patch_embed: x={x.shape}, H={H}, W={W}")
-
-            for j, blk in enumerate(block):
-                # print(f"Before block {j+1}: {x.shape}")
-                x = blk(x, H, W)
-                # print(f"After block {j+1}: {x.shape}")
-
-            x = norm(x)
-            # print(f"After norm: {x.shape}")
-            x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
-            # print(f"After reshape: {x.shape}")
-            outs.append(x)
-            # print(f"Stage {i+1} output shape: {x.shape}")
+        x, height, width = patch_embed(x)
+        patch_embed = getattr(self, f'patch_embed{i + 1}')
+        block = getattr(self, f'block{i + 1}')
+        norm = getattr(self, f'norm{i + 1}')
+        x, H, W = patch_embed(x)
+        for blk in block:
+            x = blk(x, H, W)
+        x = norm(x)
+        x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
+        outs.append(x)
 
         return outs
