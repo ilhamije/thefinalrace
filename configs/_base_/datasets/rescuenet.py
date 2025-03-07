@@ -1,5 +1,6 @@
 # dataset settings
-dataset_type = 'RescueNetDataset'
+# dataset_type = 'RescueNetDataset'
+dataset_type = 'RescueNetDatasetSubset10'
 data_root = 'data/rescuenet/'
 
 # Adjusted crop size and image scale for memory optimization

@@ -41,6 +41,7 @@ from .transforms import (CLAHE, AdjustGamma, Albu, BioMedical3DPad,
                          SegRescale)
 from .voc import PascalVOCDataset
 from .rescuenet import RescueNetDataset
+from .rescuenet_subset10percent import RescueNetDatasetSubset10
 
 # yapf: enable
 __all__ = [
@@ -62,5 +63,5 @@ __all__ = [
     'MapillaryDataset_v2', 'Albu', 'LEVIRCDDataset',
     'LoadMultipleRSImageFromFile', 'LoadSingleRSImageFromFile',
     'ConcatCDInput', 'BaseCDDataset', 'DSDLSegDataset', 'BDD100KDataset',
-    'NYUDataset', 'HSIDrive20Dataset', 'RescueNetDataset'
+    'NYUDataset', 'HSIDrive20Dataset', 'RescueNetDataset', 'RescueNetDatasetSubset10'
 ]
