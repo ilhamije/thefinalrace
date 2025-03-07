@@ -13,7 +13,7 @@ data_preprocessor = dict(
     bgr_to_rgb=True,
     pad_val=0,
     seg_pad_val=255,
-    size=None,
+    size=(4000, 3000),
     test_cfg = dict(
         size_divisor=32,
         mode='sliding_window',  # Enable patch-based inference
@@ -59,8 +59,8 @@ model = dict(
     test_cfg=dict(mode='whole'))
 
 # dataset settings
-# train_dataloader = dict(batch_size=16)
-train_dataloader = dict(batch_size=8, num_workers=1, pin_memory=True)
+# train_dataloader = dict(batch_size=6)
+train_dataloader = dict(batch_size=1, num_workers=4)
 
 # optimizer
 optim_wrapper = dict(
@@ -87,3 +87,4 @@ param_scheduler = [
         by_epoch=False,
     )
 ]
+

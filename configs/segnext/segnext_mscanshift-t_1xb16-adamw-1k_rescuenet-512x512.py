@@ -61,7 +61,7 @@ model = dict(
 
 # dataset settings
 # train_dataloader = dict(batch_size=16, num_workers=0)
-train_dataloader = dict(batch_size=4, num_workers=2, pin_memory=True)
+train_dataloader = dict(batch_size=4, num_workers=2)
 
 # optimizer
 optim_wrapper = dict(
@@ -88,3 +88,4 @@ param_scheduler = [
         by_epoch=False,
     )
 ]
+

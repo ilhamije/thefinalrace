@@ -20,8 +20,8 @@ model = dict(
     data_preprocessor=data_preprocessor,
     pretrained=None,
     backbone=dict(
-        type='MSCAN',
-        # init_cfg=dict(type='Pretrained', checkpoint=checkpoint_file),
+        type='MSCANShift',
+        #init_cfg=dict(type='Pretrained', checkpoint=checkpoint_file),
         embed_dims=[32, 64, 160, 256],
         mlp_ratios=[8, 8, 4, 4],
         drop_rate=0.0,
@@ -42,7 +42,12 @@ model = dict(
         norm_cfg=ham_norm_cfg,
         align_corners=False,
         loss_decode=dict(
-            type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
+            type='CrossEntropyLoss',
+            use_sigmoid=False,
+            loss_weight=1.0,
+            class_weight=[0.5, 1.0, 2.0, 3.0,
+                          3.0, 5.0, 1.0, 1.0, 1.0, 2.0, 3.0]
+        ),
         ham_kwargs=dict(
             MD_S=1,
             MD_R=16,
@@ -55,7 +60,8 @@ model = dict(
     test_cfg=dict(mode='whole'))
 
 # dataset settings
-train_dataloader = dict(batch_size=8, num_workers=1)
+# train_dataloader = dict(batch_size=16, num_workers=0)
+train_dataloader = dict(batch_size=4, num_workers=2, pin_memory=True)
 
 # optimizer
 optim_wrapper = dict(
