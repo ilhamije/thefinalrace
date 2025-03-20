@@ -380,6 +380,8 @@ class MSCANShift(BaseModule):
                  mlp_ratios=[4, 4, 4, 4],
                  drop_rate=0.,
                  drop_path_rate=0.,
+                 depths=[3, 4, 6, 3],
+                 num_stages=4,
                  act_cfg={"type": 'GELU'},
                  norm_cfg={"type": 'SyncBN', "requires_grad": True},
                  pretrained=None,
@@ -421,7 +423,7 @@ class MSCANShift(BaseModule):
                     shift_size=1,
                     mlp_ratio=mlp_ratios[i],
                     drop=drop_rate,
-                    drop_path_rate=dpr[cur + j],
+                    drop_path=dpr[cur + j],
                     act_cfg=act_cfg,
                     norm_cfg=norm_cfg) for j in range(depths[i])
             ])

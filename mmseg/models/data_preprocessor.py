@@ -133,6 +133,9 @@ class SegDataPreProcessor(BaseDataPreprocessor):
                     inputs, data_samples)
         else:
             img_size = inputs[0].shape[1:]
+            print(f"Image size: {img_size}")
+            for i, input_ in enumerate(inputs):
+                print(f"Input {i} shape[1:]: {input_.shape[1:]}")
             assert all(input_.shape[1:] == img_size for input_ in inputs),  \
                 'The image size in a batch should be the same.'
             # pad images when testing

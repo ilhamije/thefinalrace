@@ -4,17 +4,15 @@ data_root = 'data/rescuenet/'
 
 # Adjusted crop size and image scale for memory optimization
 crop_size = (512, 512)
-img_scale = (2000, 1500)
+img_scale = (1500, 1125)
 
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', reduce_zero_label=True),
-    dict(
-        type='RandomResize',
-        scale=img_scale,
-        ratio_range=(0.5, 2.0),
-        keep_ratio=True
-    ),
+    # Ensures all images are (1500, 1125)
+    dict(type='Resize',
+         scale=img_scale,
+         keep_ratio=False),
     dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
     dict(type='RandomFlip', prob=0.5),
     dict(type='PhotoMetricDistortion'),
@@ -23,7 +21,7 @@ train_pipeline = [
 
 test_pipeline = [
     dict(type='LoadImageFromFile'),
-    dict(type='Resize', scale=img_scale, keep_ratio=True),
+    dict(type='Resize', scale=img_scale, keep_ratio=False),
     dict(type='LoadAnnotations'),
     dict(type='PackSegInputs')
 ]
