@@ -1,3 +1,5 @@
+echo "MMSeg version: $(python -c 'import mmseg; print(mmseg.__version__)')"
+
 CONFIG=$1
 CHECKPOINT=$2
 GPUS=$3
