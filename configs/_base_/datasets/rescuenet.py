@@ -84,6 +84,9 @@ test_dataloader = dict(
             seg_map_path='ann_dir/test'),
         pipeline=test_pipeline))
 
-val_evaluator = dict(type='IoUMetric', iou_metrics=['mIoU'])
+val_evaluator = dict(
+    type='IoUMetric',
+    iou_metrics=['mIoU'],
+    compute_loss=True  # this will log val_loss automatically!
+)
 test_evaluator = val_evaluator
-

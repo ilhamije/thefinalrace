@@ -30,5 +30,9 @@ train_dataloader = dict(dataset=dict(pipeline=train_pipeline))
 val_dataloader = dict(dataset=dict(pipeline=test_pipeline))
 test_dataloader = val_dataloader
 
-val_evaluator = dict(type='IoUMetric', iou_metrics=['mIoU'])
+val_evaluator = dict(
+    type='IoUMetric',
+    iou_metrics=['mIoU'],
+    compute_loss=True  # this will log val_loss automatically!
+)
 test_evaluator = val_evaluator
