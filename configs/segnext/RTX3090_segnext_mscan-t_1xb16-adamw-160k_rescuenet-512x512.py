@@ -59,7 +59,7 @@ model = dict(
 
 # dataset settings
 train_dataloader = dict(batch_size=8, num_workers=8, pin_memory=True)
-val_dataloader = dict(batch_size=2, num_workers=1, )
+val_dataloader = dict(batch_size=4, num_workers=1, persistent_workers=False)
 test_dataloader = val_dataloader
 
 

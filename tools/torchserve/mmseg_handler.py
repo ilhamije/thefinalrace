@@ -15,15 +15,7 @@ class MMsegHandler(BaseHandler):
 
     def initialize(self, context):
         properties = context.system_properties
-        self.map_location = None
-        # https: // github.com/open-mmlab/mmsegmentation/issues/292  # issuecomment-1521948627
-        if torch.cuda.is_available():
-            self.map_location = 'cuda'
-        elif torch.backends.mps.is_available():
-            self.map_location = 'mps'
-        else:
-            self.map_location = 'cpu'
-
+        self.map_location = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.device = torch.device(self.map_location + ':' +
                                    str(properties.get('gpu_id')) if torch.cuda.
                                    is_available() else self.map_location)
