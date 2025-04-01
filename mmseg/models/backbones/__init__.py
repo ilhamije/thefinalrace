@@ -15,6 +15,7 @@ from .mobilenet_v3 import MobileNetV3
 from .mscan import MSCAN
 from .mscan_shiftconv import MSCANShift
 from .mscan_sparseshift import MSCANSparseShift
+from .mscan_groupshift import MSCANGroupShift
 from .pidnet import PIDNet
 from .resnest import ResNeSt
 from .resnet import ResNet, ResNetV1c, ResNetV1d
@@ -33,5 +34,5 @@ __all__ = [
     'VisionTransformer', 'SwinTransformer', 'MixVisionTransformer',
     'BiSeNetV1', 'BiSeNetV2', 'ICNet', 'TIMMBackbone', 'ERFNet', 'PCPVT',
     'SVT', 'STDCNet', 'STDCContextPathNet', 'BEiT', 'MAE', 'PIDNet',
-    'MSCAN', 'MSCANShift', 'MSCANSparseShift', 'DDRNet', 'VPD'
+    'MSCAN', 'MSCANShift', 'MSCANSparseShift', 'MSCANGroupShift', 'DDRNet', 'VPD'
 ]
