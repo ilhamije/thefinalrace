@@ -21,7 +21,7 @@ model = dict(
     pretrained=None,
     backbone=dict(
         type='MSCANGroupShift',  # your registered custom backbone
-        # init_cfg=dict(type='Pretrained', checkpoint=checkpoint_file),
+        init_cfg=dict(type='Pretrained', checkpoint=checkpoint_file),
         embed_dims=[32, 64, 160, 256],
         mlp_ratios=[8, 8, 4, 4],
         drop_rate=0.0,
@@ -30,16 +30,6 @@ model = dict(
         act_cfg=dict(type='GELU'),
         norm_cfg=dict(type='SyncBN', requires_grad=True),  # for multi-GPU
     ),
-    backbone=dict(
-        type='MSCANGroupShift',
-        init_cfg=dict(type='Pretrained', checkpoint=None),
-        # ✅ Switch to GroupNorm
-        norm_cfg=dict(type='GN', num_groups=32, requires_grad=True),
-        drop_path_rate=0.1,
-        extra=dict(
-            use_1x1_after_shift=True  # ✅ Add lightweight conv after shift
-        )
-    )
     decode_head=dict(
         type='LightHamHead',
         in_channels=[64, 160, 256],
@@ -67,7 +57,16 @@ model = dict(
     test_cfg=dict(mode='whole'))
 
 # dataset settings
-train_dataloader = dict(batch_size=8, num_workers=1, pin_memory=True)
+train_dataloader = dict(
+    batch_size=16,
+    num_workers=8,  # ✅ try 8–12 depending on your CPU
+    persistent_workers=True,  # ✅ keeps workers alive to reduce startup overhead
+    pin_memory=True,
+    prefetch_factor=4,
+    drop_last=True,
+    sampler=dict(type='DefaultSampler', shuffle=True),
+)
+
 val_dataloader = dict(batch_size=4, num_workers=2)
 test_dataloader = val_dataloader
 

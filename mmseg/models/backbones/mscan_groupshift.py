@@ -416,7 +416,8 @@ class MSCANGroupShift(BaseModule):
                  norm_cfg=dict(type='SyncBN', requires_grad=True),
                  num_groups=4,
                  kernel_size=3,
-                 dilation=1):
+                 dilation=1,
+                 init_cfg=None):
         super().__init__()
         self.depths = depths
         self.num_stages = num_stages
