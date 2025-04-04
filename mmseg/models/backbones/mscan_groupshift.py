@@ -16,7 +16,7 @@ from mmseg.registry import MODELS
 
 
 class GroupedShiftConv2d(BaseModule):
-    def __init__(self, channels, kernel_size=3, num_groups=4, dilation=1):
+    def __init__(self, channels, kernel_size=3, num_groups=4, dilation=1, use_1x1_after_shift=True):
         super().__init__()
         assert channels % num_groups == 0, "Channels must be divisible by num_groups"
         self.channels = channels
@@ -24,12 +24,19 @@ class GroupedShiftConv2d(BaseModule):
         self.group_channels = channels // num_groups
         self.kernel_size = kernel_size
         self.dilation = dilation
+        self.use_1x1_after_shift = use_1x1_after_shift
 
-        self.pwconv = nn.Conv2d(channels, channels, kernel_size=1, bias=False)
+        if self.use_1x1_after_shift:
+            self.pwconv = nn.Conv2d(
+                channels, channels, kernel_size=1, bias=False)
+        else:
+            self.pwconv = nn.Identity()  # Skip 1x1 conv entirely
+
         self.norm = nn.BatchNorm2d(channels)
         self.act = nn.GELU()
 
         self.shift_offsets = self.create_shift_offsets()
+
 
     def create_shift_offsets(self):
         offsets = []
@@ -276,7 +283,8 @@ class MSCABlock(BaseModule):
                  norm_cfg=dict(type='SyncBN', requires_grad=True),
                  num_groups=4,
                  kernel_size=3,
-                 dilation=1):
+                 dilation=1,
+                 use_1x1_after_shift=True):
         super().__init__()
         self.norm1 = build_norm_layer(norm_cfg, channels)[1]
 
@@ -290,7 +298,8 @@ class MSCABlock(BaseModule):
             channels=channels,
             num_groups=num_groups,
             kernel_size=kernel_size,
-            dilation=dilation
+            dilation=dilation,
+            use_1x1_after_shift=use_1x1_after_shift,
         )
 
         self.drop_path = DropPath(
@@ -417,7 +426,8 @@ class MSCANGroupShift(BaseModule):
                  num_groups=4,
                  kernel_size=3,
                  dilation=1,
-                 init_cfg=None):
+                 init_cfg=None,
+                 use_1x1_after_shift=True):
         super().__init__()
         self.depths = depths
         self.num_stages = num_stages
@@ -438,7 +448,8 @@ class MSCANGroupShift(BaseModule):
                     norm_cfg=norm_cfg,
                     num_groups=num_groups,
                     kernel_size=kernel_size,
-                    dilation=dilation
+                    dilation=dilation,
+                    use_1x1_after_shift=use_1x1_after_shift
                 ) for j in range(depths[i])
             ])
 
