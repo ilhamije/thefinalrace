@@ -1,0 +1,108 @@
+_base_ = [
+    '../_base_/default_runtime.py',
+    '../_base_/schedules/schedule_20k.py',
+    '../_base_/datasets/rescuenet_512x512.py'
+]
+
+checkpoint_file = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segnext/mscan_t_20230227-119e8c9f.pth'
+
+crop_size = (512, 512)
+ham_norm_cfg = dict(type='SyncBN', requires_grad=True, eps=1e-5)
+
+data_preprocessor = dict(
+    type='SegDataPreProcessor',
+    mean=[123.675, 116.28, 103.53],
+    std=[58.395, 57.12, 57.375],
+    bgr_to_rgb=True,
+    pad_val=0,
+    seg_pad_val=255,
+    size=crop_size,
+    test_cfg=dict(size_divisor=32)
+)
+
+model = dict(
+    type='EncoderDecoder',
+    data_preprocessor=data_preprocessor,
+    pretrained=None,
+    backbone=dict(
+        type='MSCANSparseShift',
+        init_cfg=dict(type='Pretrained', checkpoint=checkpoint_file),
+        embed_dims=[32, 64, 160, 256],
+        mlp_ratios=[8, 8, 4, 4],
+        drop_rate=0.0,
+        drop_path_rate=0.1,
+        depths=[3, 3, 5, 2],
+        use_1x1_after_shift=False,  # ✅ no 1x1
+        act_cfg=dict(type='ReLU'),  # ✅ ReLU
+        norm_cfg=dict(type='SyncBN', requires_grad=True, eps=1e-5)
+    ),
+    decode_head=dict(
+        type='LightHamHead',
+        in_channels=[64, 160, 256],
+        in_index=[1, 2, 3],
+        channels=256,
+        ham_channels=256,
+        dropout_ratio=0.1,
+        num_classes=11,
+        norm_cfg=ham_norm_cfg,
+        align_corners=False,
+        loss_decode=dict(
+            type='CrossEntropyLoss',
+            use_sigmoid=False,
+            loss_weight=1.0,
+            avg_non_ignore=True),
+        ham_kwargs=dict(
+            MD_S=1,
+            MD_R=16,
+            train_steps=6,
+            eval_steps=7,
+            inv_t=100,
+            rand_init=True)
+    ),
+    train_cfg=dict(),
+    test_cfg=dict(mode='whole')
+)
+
+# ❌ ColorJitter removed
+train_pipeline = [
+    dict(type='LoadImageFromFile'),
+    dict(type='LoadAnnotations'),
+    dict(type='Resize', scale=crop_size, keep_ratio=True),
+    dict(type='RandomFlip', prob=0.5),
+    dict(type='PackSegInputs')
+]
+
+train_dataloader = dict(batch_size=8, num_workers=4, pin_memory=True)
+val_dataloader = dict(batch_size=4, num_workers=2)
+test_dataloader = val_dataloader
+
+optim_wrapper = dict(
+    _delete_=True,
+    type='OptimWrapper',
+    optimizer=dict(
+        type='AdamW', lr=0.00015, betas=(0.9, 0.999), weight_decay=0.012),
+    clip_grad=dict(max_norm=0.5, norm_type=2),
+    paramwise_cfg=dict(
+        custom_keys={
+            'pos_block': dict(decay_mult=0.),
+            'norm': dict(decay_mult=0.),
+            'head': dict(lr_mult=10.)
+        })
+)
+
+param_scheduler = [
+    dict(
+        type='LinearLR',
+        start_factor=1e-6,
+        by_epoch=False,
+        begin=0,
+        end=5000),
+    dict(
+        type='PolyLR',
+        power=1.0,
+        begin=3000,
+        end=20000,
+        eta_min=0.0,
+        by_epoch=False,
+    )
+]

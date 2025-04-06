@@ -97,7 +97,7 @@ test_dataloader = dict(
 
 val_evaluator = dict(
     type='IoUMetric',
-    iou_metrics=['mIoU'],
+    iou_metrics=['mIoU', 'mFscore'],
     compute_loss=True  # this will log val_loss automatically!
 )
 test_evaluator = val_evaluator
