@@ -42,7 +42,7 @@ gpu_ids = [
     0,
     1,
 ]
-ham_norm_cfg = dict(eps=1e-05, requires_grad=True, type='SyncBN')
+ham_norm_cfg = dict(eps=1e-05, num_groups=32, requires_grad=True, type='GN')
 img_ratios = [
     0.5,
     0.75,
@@ -86,7 +86,7 @@ model = dict(
             4,
             4,
         ],
-        norm_cfg=dict(eps=1e-05, requires_grad=True, type='SyncBN'),
+        norm_cfg=dict(eps=1e-05, num_groups=16, requires_grad=True, type='GN'),
         type='MSCANSparseShift',
         use_1x1_after_shift=True),
     data_preprocessor=dict(
@@ -136,7 +136,7 @@ model = dict(
             loss_weight=1.0,
             type='CrossEntropyLoss',
             use_sigmoid=False),
-        norm_cfg=dict(eps=1e-05, requires_grad=True, type='SyncBN'),
+        norm_cfg=dict(eps=1e-05, num_groups=32, requires_grad=True, type='GN'),
         num_classes=11,
         type='LightHamHead'),
     pretrained=None,
@@ -196,6 +196,7 @@ test_dataloader = dict(
 test_evaluator = dict(
     compute_loss=True, iou_metrics=[
         'mIoU',
+        'mFscore',
     ], type='IoUMetric')
 test_pipeline = [
     dict(type='LoadImageFromFile'),
@@ -330,8 +331,9 @@ val_dataloader = dict(
 val_evaluator = dict(
     compute_loss=True, iou_metrics=[
         'mIoU',
+        'mFscore',
     ], type='IoUMetric')
 vis_backends = []
 visualizer = dict(
     name='visualizer', type='SegLocalVisualizer', vis_backends=[])
-work_dir = 'work_dirs/RTX3090_segnext_mscan-sparseshift-t_ablation_var-a'
+work_dir = 'work_dirs/RTX3090_segnext_mscan-sparseshift-t_ablation_var-g'

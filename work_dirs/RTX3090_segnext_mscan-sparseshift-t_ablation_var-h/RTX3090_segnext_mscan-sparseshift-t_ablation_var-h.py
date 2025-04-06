@@ -42,7 +42,7 @@ gpu_ids = [
     0,
     1,
 ]
-ham_norm_cfg = dict(eps=1e-05, requires_grad=True, type='SyncBN')
+ham_norm_cfg = dict(eps=1e-05, num_groups=32, requires_grad=True, type='GN')
 img_ratios = [
     0.5,
     0.75,
@@ -61,7 +61,7 @@ log_level = 'INFO'
 log_processor = dict(by_epoch=False)
 model = dict(
     backbone=dict(
-        act_cfg=dict(type='GELU'),
+        act_cfg=dict(type='ReLU'),
         depths=[
             3,
             3,
@@ -86,7 +86,7 @@ model = dict(
             4,
             4,
         ],
-        norm_cfg=dict(eps=1e-05, requires_grad=True, type='SyncBN'),
+        norm_cfg=dict(eps=1e-05, num_groups=16, requires_grad=True, type='GN'),
         type='MSCANSparseShift',
         use_1x1_after_shift=True),
     data_preprocessor=dict(
@@ -136,7 +136,7 @@ model = dict(
             loss_weight=1.0,
             type='CrossEntropyLoss',
             use_sigmoid=False),
-        norm_cfg=dict(eps=1e-05, requires_grad=True, type='SyncBN'),
+        norm_cfg=dict(eps=1e-05, num_groups=32, requires_grad=True, type='GN'),
         num_classes=11,
         type='LightHamHead'),
     pretrained=None,
@@ -196,6 +196,7 @@ test_dataloader = dict(
 test_evaluator = dict(
     compute_loss=True, iou_metrics=[
         'mIoU',
+        'mFscore',
     ], type='IoUMetric')
 test_pipeline = [
     dict(type='LoadImageFromFile'),
@@ -252,29 +253,11 @@ train_dataloader = dict(
     sampler=dict(shuffle=True, type='InfiniteSampler'))
 train_pipeline = [
     dict(type='LoadImageFromFile'),
-    dict(reduce_zero_label=True, type='LoadAnnotations'),
-    dict(keep_ratio=False, scale=(
+    dict(type='LoadAnnotations'),
+    dict(keep_ratio=True, scale=(
         512,
         512,
     ), type='Resize'),
-    dict(
-        keymap=dict(gt_semantic_seg='mask', img='image'),
-        transforms=[
-            dict(
-                brightness=0.2,
-                contrast=0.2,
-                hue=0.1,
-                p=1.0,
-                saturation=0.2,
-                type='ColorJitter'),
-            dict(limit=10, p=0.3, type='Rotate'),
-            dict(blur_limit=(
-                3,
-                7,
-            ), p=0.3, type='GaussianBlur'),
-        ],
-        type='Albu',
-        update_pad_shape=False),
     dict(prob=0.5, type='RandomFlip'),
     dict(type='PackSegInputs'),
 ]
@@ -330,8 +313,9 @@ val_dataloader = dict(
 val_evaluator = dict(
     compute_loss=True, iou_metrics=[
         'mIoU',
+        'mFscore',
     ], type='IoUMetric')
 vis_backends = []
 visualizer = dict(
     name='visualizer', type='SegLocalVisualizer', vis_backends=[])
-work_dir = 'work_dirs/RTX3090_segnext_mscan-sparseshift-t_ablation_var-a'
+work_dir = 'work_dirs/RTX3090_segnext_mscan-sparseshift-t_ablation_var-h'

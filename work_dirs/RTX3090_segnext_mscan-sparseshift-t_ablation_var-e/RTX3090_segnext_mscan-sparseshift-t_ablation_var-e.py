@@ -88,7 +88,7 @@ model = dict(
         ],
         norm_cfg=dict(eps=1e-05, requires_grad=True, type='SyncBN'),
         type='MSCANSparseShift',
-        use_1x1_after_shift=True),
+        use_1x1_after_shift=False),
     data_preprocessor=dict(
         bgr_to_rgb=True,
         mean=[
@@ -334,4 +334,4 @@ val_evaluator = dict(
 vis_backends = []
 visualizer = dict(
     name='visualizer', type='SegLocalVisualizer', vis_backends=[])
-work_dir = 'work_dirs/RTX3090_segnext_mscan-sparseshift-t_ablation_var-a'
+work_dir = 'work_dirs/RTX3090_segnext_mscan-sparseshift-t_ablation_var-e'

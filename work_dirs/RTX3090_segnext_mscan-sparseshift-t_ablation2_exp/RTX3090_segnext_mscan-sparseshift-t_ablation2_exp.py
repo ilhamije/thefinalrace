@@ -1,4 +1,3 @@
-checkpoint_file = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segnext/mscan_t_20230227-119e8c9f.pth'
 crop_size = (
     512,
     512,
@@ -42,7 +41,7 @@ gpu_ids = [
     0,
     1,
 ]
-ham_norm_cfg = dict(eps=1e-05, requires_grad=True, type='SyncBN')
+ham_norm_cfg = dict(num_groups=32, requires_grad=True, type='GN')
 img_ratios = [
     0.5,
     0.75,
@@ -61,34 +60,27 @@ log_level = 'INFO'
 log_processor = dict(by_epoch=False)
 model = dict(
     backbone=dict(
-        act_cfg=dict(type='GELU'),
-        depths=[
+        depths=(
             3,
+            4,
+            6,
             3,
-            5,
-            2,
-        ],
+        ),
         drop_path_rate=0.1,
-        drop_rate=0.0,
-        embed_dims=[
-            32,
+        embed_dims=(
             64,
-            160,
-            256,
-        ],
-        init_cfg=dict(
-            checkpoint=
-            'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segnext/mscan_t_20230227-119e8c9f.pth',
-            type='Pretrained'),
-        mlp_ratios=[
-            8,
-            8,
+            128,
+            320,
+            512,
+        ),
+        in_channels=3,
+        mlp_ratios=(
             4,
             4,
-        ],
-        norm_cfg=dict(eps=1e-05, requires_grad=True, type='SyncBN'),
-        type='MSCANSparseShift',
-        use_1x1_after_shift=True),
+            4,
+            4,
+        ),
+        type='MSCANSparseShift'),
     data_preprocessor=dict(
         bgr_to_rgb=True,
         mean=[
@@ -113,18 +105,10 @@ model = dict(
         align_corners=False,
         channels=256,
         dropout_ratio=0.1,
-        ham_channels=256,
-        ham_kwargs=dict(
-            MD_R=16,
-            MD_S=1,
-            eval_steps=7,
-            inv_t=100,
-            rand_init=True,
-            train_steps=6),
         in_channels=[
-            64,
-            160,
-            256,
+            128,
+            320,
+            512,
         ],
         in_index=[
             1,
@@ -136,38 +120,45 @@ model = dict(
             loss_weight=1.0,
             type='CrossEntropyLoss',
             use_sigmoid=False),
-        norm_cfg=dict(eps=1e-05, requires_grad=True, type='SyncBN'),
+        norm_cfg=dict(num_groups=32, requires_grad=True, type='GN'),
         num_classes=11,
-        type='LightHamHead'),
+        pool_scales=(
+            1,
+            2,
+            3,
+            6,
+        ),
+        type='UPerHead'),
     pretrained=None,
     test_cfg=dict(mode='whole'),
     train_cfg=dict(),
     type='EncoderDecoder')
 optim_wrapper = dict(
-    clip_grad=dict(max_norm=0.5, norm_type=2),
+    clip_grad=None,
     optimizer=dict(
         betas=(
             0.9,
             0.999,
-        ), lr=0.00018, type='AdamW', weight_decay=0.01),
+        ),
+        lr=6e-05,
+        momentum=0.9,
+        type='AdamW',
+        weight_decay=0.01),
     paramwise_cfg=dict(
         custom_keys=dict(
-            head=dict(lr_mult=10.0),
-            norm=dict(decay_mult=0.0),
-            pos_block=dict(decay_mult=0.0))),
+            norm=dict(decay_mult=0.0), pos_block=dict(decay_mult=0.0))),
     type='OptimWrapper')
 optimizer = dict(lr=0.01, momentum=0.9, type='AdamW', weight_decay=0.0005)
 param_scheduler = [
     dict(
-        begin=0, by_epoch=False, end=5000, start_factor=1e-06,
+        begin=0, by_epoch=False, end=1500, start_factor=1e-06,
         type='LinearLR'),
     dict(
-        begin=5000,
+        begin=1500,
         by_epoch=False,
         end=20000,
-        eta_min=0.0,
-        power=1.0,
-        type='PolyLR'),
+        eta_min=1e-05,
+        type='CosineAnnealingLR'),
 ]
 resume = False
 test_cfg = dict(type='TestLoop')
@@ -196,6 +187,7 @@ test_dataloader = dict(
 test_evaluator = dict(
     compute_loss=True, iou_metrics=[
         'mIoU',
+        'mFscore',
     ], type='IoUMetric')
 test_pipeline = [
     dict(type='LoadImageFromFile'),
@@ -246,7 +238,7 @@ train_dataloader = dict(
             dict(type='PackSegInputs'),
         ],
         type='RescueNetDataset'),
-    num_workers=4,
+    num_workers=8,
     persistent_workers=True,
     pin_memory=True,
     sampler=dict(shuffle=True, type='InfiniteSampler'))
@@ -330,8 +322,9 @@ val_dataloader = dict(
 val_evaluator = dict(
     compute_loss=True, iou_metrics=[
         'mIoU',
+        'mFscore',
     ], type='IoUMetric')
 vis_backends = []
 visualizer = dict(
     name='visualizer', type='SegLocalVisualizer', vis_backends=[])
-work_dir = 'work_dirs/RTX3090_segnext_mscan-sparseshift-t_ablation_var-a'
+work_dir = 'work_dirs/RTX3090_segnext_mscan-sparseshift-t_ablation2_exp'

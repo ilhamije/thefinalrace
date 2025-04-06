@@ -42,7 +42,7 @@ gpu_ids = [
     0,
     1,
 ]
-ham_norm_cfg = dict(eps=1e-05, requires_grad=True, type='SyncBN')
+ham_norm_cfg = dict(num_groups=32, requires_grad=True, type='GN')
 img_ratios = [
     0.5,
     0.75,
@@ -62,6 +62,36 @@ log_processor = dict(by_epoch=False)
 model = dict(
     backbone=dict(
         act_cfg=dict(type='GELU'),
+        attention_kernel_paddings=[
+            2,
+            [
+                0,
+                3,
+            ],
+            [
+                0,
+                5,
+            ],
+            [
+                0,
+                10,
+            ],
+        ],
+        attention_kernel_sizes=[
+            5,
+            [
+                1,
+                7,
+            ],
+            [
+                1,
+                11,
+            ],
+            [
+                1,
+                21,
+            ],
+        ],
         depths=[
             3,
             3,
@@ -86,9 +116,8 @@ model = dict(
             4,
             4,
         ],
-        norm_cfg=dict(eps=1e-05, requires_grad=True, type='SyncBN'),
-        type='MSCANSparseShift',
-        use_1x1_after_shift=True),
+        norm_cfg=dict(requires_grad=True, type='BN'),
+        type='MSCAN'),
     data_preprocessor=dict(
         bgr_to_rgb=True,
         mean=[
@@ -136,7 +165,7 @@ model = dict(
             loss_weight=1.0,
             type='CrossEntropyLoss',
             use_sigmoid=False),
-        norm_cfg=dict(eps=1e-05, requires_grad=True, type='SyncBN'),
+        norm_cfg=dict(num_groups=32, requires_grad=True, type='GN'),
         num_classes=11,
         type='LightHamHead'),
     pretrained=None,
@@ -144,12 +173,11 @@ model = dict(
     train_cfg=dict(),
     type='EncoderDecoder')
 optim_wrapper = dict(
-    clip_grad=dict(max_norm=0.5, norm_type=2),
     optimizer=dict(
         betas=(
             0.9,
             0.999,
-        ), lr=0.00018, type='AdamW', weight_decay=0.01),
+        ), lr=0.00024, type='AdamW', weight_decay=0.01),
     paramwise_cfg=dict(
         custom_keys=dict(
             head=dict(lr_mult=10.0),
@@ -159,12 +187,12 @@ optim_wrapper = dict(
 optimizer = dict(lr=0.01, momentum=0.9, type='AdamW', weight_decay=0.0005)
 param_scheduler = [
     dict(
-        begin=0, by_epoch=False, end=5000, start_factor=1e-06,
+        begin=0, by_epoch=False, end=1500, start_factor=1e-06,
         type='LinearLR'),
     dict(
-        begin=5000,
+        begin=1500,
         by_epoch=False,
-        end=20000,
+        end=160000,
         eta_min=0.0,
         power=1.0,
         type='PolyLR'),
@@ -196,6 +224,7 @@ test_dataloader = dict(
 test_evaluator = dict(
     compute_loss=True, iou_metrics=[
         'mIoU',
+        'mFscore',
     ], type='IoUMetric')
 test_pipeline = [
     dict(type='LoadImageFromFile'),
@@ -246,7 +275,7 @@ train_dataloader = dict(
             dict(type='PackSegInputs'),
         ],
         type='RescueNetDataset'),
-    num_workers=4,
+    num_workers=8,
     persistent_workers=True,
     pin_memory=True,
     sampler=dict(shuffle=True, type='InfiniteSampler'))
@@ -330,8 +359,9 @@ val_dataloader = dict(
 val_evaluator = dict(
     compute_loss=True, iou_metrics=[
         'mIoU',
+        'mFscore',
     ], type='IoUMetric')
 vis_backends = []
 visualizer = dict(
     name='visualizer', type='SegLocalVisualizer', vis_backends=[])
-work_dir = 'work_dirs/RTX3090_segnext_mscan-sparseshift-t_ablation_var-a'
+work_dir = 'work_dirs/RTX3090_segnext_mscan-sparseshift-t_ablation_baseline'

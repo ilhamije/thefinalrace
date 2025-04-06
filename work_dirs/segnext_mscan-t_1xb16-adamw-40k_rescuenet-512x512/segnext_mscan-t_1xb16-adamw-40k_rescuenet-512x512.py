@@ -27,7 +27,7 @@ data_root = 'data/rescuenet/'
 dataset_type = 'RescueNetDataset'
 default_hooks = dict(
     checkpoint=dict(by_epoch=False, interval=10000, type='CheckpointHook'),
-    logger=dict(interval=100, log_metric_by_epoch=True, type='LoggerHook'),
+    logger=dict(interval=100, log_metric_by_epoch=False, type='LoggerHook'),
     param_scheduler=dict(type='ParamSchedulerHook'),
     sampler_seed=dict(type='DistSamplerSeedHook'),
     timer=dict(type='IterTimerHook'),
@@ -52,11 +52,11 @@ img_ratios = [
     1.75,
 ]
 img_scale = (
-    2000,
     1500,
+    1125,
 )
 launcher = 'none'
-load_from = None
+load_from = 'work_dirs/segnext_mscan-t_1xb16-adamw-40k_rescuenet-512x512/iter_20000.pth'
 log_level = 'INFO'
 log_processor = dict(by_epoch=False)
 model = dict(
@@ -197,39 +197,50 @@ param_scheduler = [
         power=1.0,
         type='PolyLR'),
 ]
-resume = True
+resume = False
 test_cfg = dict(type='TestLoop')
 test_dataloader = dict(
-    batch_size=1,
+    batch_size=4,
     dataset=dict(
         data_prefix=dict(img_path='img_dir/test', seg_map_path='ann_dir/test'),
         data_root='data/rescuenet/',
         pipeline=[
             dict(type='LoadImageFromFile'),
-            dict(keep_ratio=True, scale=(
-                2000,
-                1500,
+            dict(keep_ratio=False, scale=(
+                512,
+                512,
             ), type='Resize'),
+            dict(pad_val=0, size=(
+                512,
+                512,
+            ), type='Pad'),
             dict(type='LoadAnnotations'),
             dict(type='PackSegInputs'),
         ],
         type='RescueNetDataset'),
-    num_workers=1,
-    persistent_workers=True,
+    num_workers=2,
+    persistent_workers=False,
     sampler=dict(shuffle=False, type='DefaultSampler'))
 test_evaluator = dict(
-    format_only=True,
+    compute_loss=True,
     iou_metrics=[
         'mIoU',
+        'mFscore',
     ],
-    output_dir='work_dirs/format_results',
+    keep_results=True,
+    output_dir=
+    'result/pred_result_segnext_mscan-t_1xb16-adamw-40k_rescuenet-512x512',
     type='IoUMetric')
 test_pipeline = [
     dict(type='LoadImageFromFile'),
-    dict(keep_ratio=True, scale=(
-        2000,
-        1500,
+    dict(keep_ratio=False, scale=(
+        512,
+        512,
     ), type='Resize'),
+    dict(pad_val=0, size=(
+        512,
+        512,
+    ), type='Pad'),
     dict(type='LoadAnnotations'),
     dict(type='PackSegInputs'),
 ]
@@ -244,24 +255,29 @@ train_dataloader = dict(
         pipeline=[
             dict(type='LoadImageFromFile'),
             dict(reduce_zero_label=True, type='LoadAnnotations'),
+            dict(keep_ratio=False, scale=(
+                512,
+                512,
+            ), type='Resize'),
             dict(
-                keep_ratio=True,
-                ratio_range=(
-                    0.5,
-                    2.0,
-                ),
-                scale=(
-                    2000,
-                    1500,
-                ),
-                type='RandomResize'),
-            dict(
-                cat_max_ratio=0.75, crop_size=(
-                    512,
-                    512,
-                ), type='RandomCrop'),
+                keymap=dict(gt_semantic_seg='mask', img='image'),
+                transforms=[
+                    dict(
+                        brightness=0.2,
+                        contrast=0.2,
+                        hue=0.1,
+                        p=1.0,
+                        saturation=0.2,
+                        type='ColorJitter'),
+                    dict(limit=10, p=0.3, type='Rotate'),
+                    dict(blur_limit=(
+                        3,
+                        7,
+                    ), p=0.3, type='GaussianBlur'),
+                ],
+                type='Albu',
+                update_pad_shape=False),
             dict(prob=0.5, type='RandomFlip'),
-            dict(type='PhotoMetricDistortion'),
             dict(type='PackSegInputs'),
         ],
         type='RescueNetDataset'),
@@ -272,23 +288,29 @@ train_dataloader = dict(
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(reduce_zero_label=True, type='LoadAnnotations'),
+    dict(keep_ratio=False, scale=(
+        512,
+        512,
+    ), type='Resize'),
     dict(
-        keep_ratio=True,
-        ratio_range=(
-            0.5,
-            2.0,
-        ),
-        scale=(
-            2000,
-            1500,
-        ),
-        type='RandomResize'),
-    dict(cat_max_ratio=0.75, crop_size=(
-        512,
-        512,
-    ), type='RandomCrop'),
+        keymap=dict(gt_semantic_seg='mask', img='image'),
+        transforms=[
+            dict(
+                brightness=0.2,
+                contrast=0.2,
+                hue=0.1,
+                p=1.0,
+                saturation=0.2,
+                type='ColorJitter'),
+            dict(limit=10, p=0.3, type='Rotate'),
+            dict(blur_limit=(
+                3,
+                7,
+            ), p=0.3, type='GaussianBlur'),
+        ],
+        type='Albu',
+        update_pad_shape=False),
     dict(prob=0.5, type='RandomFlip'),
-    dict(type='PhotoMetricDistortion'),
     dict(type='PackSegInputs'),
 ]
 tta_model = dict(type='SegTTAModel')
@@ -319,34 +341,33 @@ tta_pipeline = [
 ]
 val_cfg = dict(type='ValLoop')
 val_dataloader = dict(
-    batch_size=1,
+    batch_size=4,
     dataset=dict(
         data_prefix=dict(img_path='img_dir/val', seg_map_path='ann_dir/val'),
         data_root='data/rescuenet/',
         pipeline=[
             dict(type='LoadImageFromFile'),
-            dict(keep_ratio=True, scale=(
-                2000,
-                1500,
+            dict(keep_ratio=False, scale=(
+                512,
+                512,
             ), type='Resize'),
+            dict(pad_val=0, size=(
+                512,
+                512,
+            ), type='Pad'),
             dict(type='LoadAnnotations'),
             dict(type='PackSegInputs'),
         ],
         type='RescueNetDataset'),
-    num_workers=1,
+    num_workers=2,
     persistent_workers=True,
     sampler=dict(shuffle=False, type='DefaultSampler'))
 val_evaluator = dict(
-    iou_metrics=[
+    compute_loss=True, iou_metrics=[
         'mIoU',
+        'mFscore',
     ], type='IoUMetric')
-vis_backends = [
-    dict(type='LocalVisBackend'),
-]
+vis_backends = []
 visualizer = dict(
-    name='visualizer',
-    type='SegLocalVisualizer',
-    vis_backends=[
-        dict(type='LocalVisBackend'),
-    ])
+    name='visualizer', type='SegLocalVisualizer', vis_backends=[])
 work_dir = './work_dirs/segnext_mscan-t_1xb16-adamw-40k_rescuenet-512x512'

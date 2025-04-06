@@ -61,7 +61,7 @@ log_level = 'INFO'
 log_processor = dict(by_epoch=False)
 model = dict(
     backbone=dict(
-        act_cfg=dict(type='GELU'),
+        act_cfg=dict(type='ReLU'),
         depths=[
             3,
             3,
@@ -334,4 +334,4 @@ val_evaluator = dict(
 vis_backends = []
 visualizer = dict(
     name='visualizer', type='SegLocalVisualizer', vis_backends=[])
-work_dir = 'work_dirs/RTX3090_segnext_mscan-sparseshift-t_ablation_var-a'
+work_dir = 'work_dirs/RTX3090_segnext_mscan-sparseshift-t_ablation_var-c'
