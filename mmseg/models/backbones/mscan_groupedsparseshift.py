@@ -6,6 +6,7 @@ import warnings
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from mmcv.cnn import build_activation_layer, build_norm_layer
 from mmcv.cnn.bricks import DropPath
 from mmengine.model import BaseModule
@@ -15,57 +16,56 @@ from mmengine.model.weight_init import (constant_init, normal_init,
 from mmseg.registry import MODELS
 
 
-class GroupedShiftConv2d(nn.Module):
-    def __init__(
-        self,
-        in_channels,
-        shift_offsets=None,
-        use_1x1_after_shift=True,
-        act_cfg=dict(type='GELU'),
-        norm_cfg=dict(type='SyncBN', requires_grad=True)
-    ):
+class GroupedSparseShiftConv2d(nn.Module):
+    def __init__(self, channels, groups=4, shift_patterns=None):
         super().__init__()
-        self.in_channels = in_channels
-        self.use_1x1 = use_1x1_after_shift
+        assert channels % groups == 0
+        self.groups = groups
+        self.group_channels = channels // groups
+        self.patterns = shift_patterns or ['left', 'right', 'up', 'down']
+        assert len(self.patterns) == groups
 
-        # Default to 3x3 shift if none provided
-        if shift_offsets is None:
-            shift_offsets = [
-                (1, 0), (-1, 0), (0, 1), (0, -1),
-                (1, 1), (-1, -1), (1, -1), (-1, 1)
-            ]
-        self.shift_offsets = shift_offsets
-        self.num_groups = len(shift_offsets)
-        assert in_channels % self.num_groups == 0, \
-            f"in_channels={in_channels} must be divisible by groups={self.num_groups}"
-        self.channels_per_group = in_channels // self.num_groups
 
-        # Optional post-shift 1x1 conv
-        if self.use_1x1:
-            self.pointwise = nn.Conv2d(in_channels, in_channels, kernel_size=1)
-            self.norm = build_norm_layer(norm_cfg, in_channels)[1]
-            self.act = build_activation_layer(act_cfg)
-        else:
-            self.pointwise = None
+
+
+class MSSSBlock(nn.Module):
+    """
+    Grouped Sparse Shift Convolution Block.
+    This block is a modified version of the original MSSSBlock
+    that uses GroupedSparseShiftConv2d instead of SparseShiftConv2d
+    Args:
+        dim (int): The dimension of input features.
+        branch_groups (int): The number of groups in each branch.
+            Defaults: 4.
+    """
+    def __init__(self, dim, branch_groups=4):
+        super().__init__()
+        self.branches = nn.ModuleList([
+            GroupedSparseShiftConv2d(dim, groups=branch_groups),
+            GroupedSparseShiftConv2d(dim, groups=branch_groups, shift_patterns=[
+                                     'up', 'down', 'right', 'left']),
+            GroupedSparseShiftConv2d(dim, groups=branch_groups, shift_patterns=[
+                                     'down', 'up', 'left', 'right']),
+            GroupedSparseShiftConv2d(dim, groups=branch_groups, shift_patterns=[
+                                    'left']*4)
+        ])
+        self.fuse = nn.Conv2d(dim, dim, kernel_size=1)
+        self.norm = nn.GroupNorm(1, dim)
+        self.act = nn.GELU()
 
     def forward(self, x):
-        B, C, H, W = x.shape
-        x_split = torch.chunk(x, self.num_groups, dim=1)
+        debug_outs = []
+        for branch in self.branches:
+            b_out = branch(x)
+            debug_outs.append(b_out)
+            assert b_out.shape == x.shape, f"Shape mismatch: got {b_out.shape}, expected {x.shape}"
+        out = sum(debug_outs)
+        return self.act(self.norm(self.fuse(out)))
 
-        out = []
-        for xi, (dy, dx) in zip(x_split, self.shift_offsets):
-            shifted = torch.roll(xi, shifts=(dy, dx), dims=(2, 3))
-            out.append(shifted)
 
-        x_shifted = torch.cat(out, dim=1)
-
-        if self.use_1x1:
-            x_shifted = self.pointwise(x_shifted)
-            x_shifted = self.norm(x_shifted)
-            x_shifted = self.act(x_shifted)
-
-        return x_shifted
-
+# Copyright (c) OpenMMLab. All rights reserved.
+# Originally from https://github.com/visual-attention-network/segnext
+# Licensed under the Apache License, Version 2.0 (the "License")
 
 
 class Mlp(BaseModule):
@@ -213,19 +213,22 @@ class MSCAAttention(BaseModule):
         attn = self.conv0(x)
 
         # Multi-Scale Feature extraction
-        attn_0 = self.conv0_1(attn)  # Fixed layer name
-        attn_0 = self.conv0_2(attn_0)  # Fixed layer name
+        attn_0 = self.conv0_1(attn)
+        attn_0 = self.conv0_2(attn_0)
 
-        attn_1 = self.conv1_1(attn)  # Fixed layer name
-        attn_1 = self.conv1_2(attn_1)  # Fixed layer name
+        attn_1 = self.conv1_1(attn)
+        attn_1 = self.conv1_2(attn_1)
 
-        attn_2 = self.conv2_1(attn)  # Fixed layer name
-        attn_2 = self.conv2_2(attn_2)  # Fixed layer name
+        attn_2 = self.conv2_1(attn)
+        attn_2 = self.conv2_2(attn_2)
 
         attn = attn + attn_0 + attn_1 + attn_2
+        # Channel Mixing
         attn = self.conv3(attn)
 
+        # Convolutional Attention
         x = attn * u
+
         return x
 
 
@@ -269,36 +272,50 @@ class MSCASpatialAttention(BaseModule):
         return x
 
 
-# Modify MSCABlock to integrate the GroupedShiftConv2d
 class MSCABlock(BaseModule):
+    """Basic Multi-Scale Convolutional Attention Block. It leverage the large-
+    kernel attention (LKA) mechanism to build both channel and spatial
+    attention. In each branch, it uses two depth-wise strip convolutions to
+    approximate standard depth-wise convolutions with large kernels. The kernel
+    size for each branch is set to 7, 11, and 21, respectively.
+
+    Args:
+        channels (int): The dimension of channels.
+        attention_kernel_sizes (list): The size of attention
+            kernel. Defaults: [5, [1, 7], [1, 11], [1, 21]].
+        attention_kernel_paddings (list): The number of
+            corresponding padding value in attention module.
+            Defaults: [2, [0, 3], [0, 5], [0, 10]].
+        mlp_ratio (float): The ratio of multiple input dimension to
+            calculate hidden feature in MLP layer. Defaults: 4.0.
+        drop (float): The number of dropout rate in MLP block.
+            Defaults: 0.0.
+        drop_path (float): The ratio of drop paths.
+            Defaults: 0.0.
+        act_cfg (dict): Config dict for activation layer in block.
+            Default: dict(type='GELU').
+        norm_cfg (dict): Config dict for normalization layer.
+            Defaults: dict(type='SyncBN', requires_grad=True).
+    """
+
     def __init__(self,
                  channels,
+                 attention_kernel_sizes=[5, [1, 7], [1, 11], [1, 21]],
+                 attention_kernel_paddings=[2, [0, 3], [0, 5], [0, 10]],
                  mlp_ratio=4.,
                  drop=0.,
                  drop_path=0.,
                  act_cfg=dict(type='GELU'),
                  norm_cfg=dict(type='SyncBN', requires_grad=True),
-                 num_groups=4,
-                 kernel_size=3,
-                 dilation=1,
-                 use_1x1_after_shift=True,
-                 shift_offsets=None):
+                 use_msss=False):
         super().__init__()
         self.norm1 = build_norm_layer(norm_cfg, channels)[1]
 
-        # Store parameters for transparency/debug
-        self.num_groups = num_groups
-        self.kernel_size = kernel_size
-        self.dilation = dilation
-
-        # Replace original Spatial Attention with GroupedShiftConv2d
-        self.attn = GroupedShiftConv2d(
-            in_channels=channels,
-            shift_offsets=shift_offsets,
-            use_1x1_after_shift=use_1x1_after_shift,
-            act_cfg=act_cfg,
-            norm_cfg=norm_cfg,
-        )
+        if use_msss:
+            self.attn = MSSSBlock(channels, branch_groups=4)
+        else:
+            self.attn = MSCASpatialAttention(
+                channels, attention_kernel_sizes, attention_kernel_paddings, act_cfg)
 
         self.drop_path = DropPath(
             drop_path) if drop_path > 0. else nn.Identity()
@@ -316,21 +333,18 @@ class MSCABlock(BaseModule):
             layer_scale_init_value * torch.ones(channels), requires_grad=True)
 
     def forward(self, x, H, W):
+        """Forward function."""
+
         B, N, C = x.shape
         x = x.permute(0, 2, 1).view(B, C, H, W)
-
-        # GSC replacing original attention
         x = x + self.drop_path(
             self.layer_scale_1.unsqueeze(-1).unsqueeze(-1) *
             self.attn(self.norm1(x)))
-
         x = x + self.drop_path(
             self.layer_scale_2.unsqueeze(-1).unsqueeze(-1) *
             self.mlp(self.norm2(x)))
         x = x.view(B, C, N).permute(0, 2, 1)
         return x
-
-
 
 
 class OverlapPatchEmbed(BaseModule):
@@ -378,8 +392,10 @@ class OverlapPatchEmbed(BaseModule):
 
 
 @MODELS.register_module()
-class MSCANGroupShift(BaseModule):
-    """SegNeXt Multi-Scale Convolutional Attention Network (MCSAN) backbone.
+class MSCANGroupedSparseShift(BaseModule):
+    """
+    Modified SegNeXt Multi-Scale Convolutional Attention Network (MCSAN) backbone:
+    MSCANGroupedSparseShift
 
     This backbone is the implementation of `SegNeXt: Rethinking
     Convolutional Attention Design for Semantic
@@ -419,40 +435,55 @@ class MSCANGroupShift(BaseModule):
                  drop_path_rate=0.,
                  depths=[3, 4, 6, 3],
                  num_stages=4,
+                 attention_kernel_sizes=[5, [1, 7], [1, 11], [1, 21]],
+                 attention_kernel_paddings=[2, [0, 3], [0, 5], [0, 10]],
                  act_cfg=dict(type='GELU'),
                  norm_cfg=dict(type='SyncBN', requires_grad=True),
-                 num_groups=4,
-                 kernel_size=3,
-                 dilation=1,
+                 pretrained=None,
                  init_cfg=None,
-                 use_1x1_after_shift=True,
-                 shift_offsets=None):
-        super().__init__()
+                 use_msss=False):
+        super().__init__(init_cfg=init_cfg)
+
+        assert not (init_cfg and pretrained), \
+            'init_cfg and pretrained cannot be set at the same time'
+        if isinstance(pretrained, str):
+            warnings.warn('DeprecationWarning: pretrained is deprecated, '
+                          'please use "init_cfg" instead')
+            self.init_cfg = dict(type='Pretrained', checkpoint=pretrained)
+        elif pretrained is not None:
+            raise TypeError('pretrained must be a str or None')
+
         self.depths = depths
         self.num_stages = num_stages
+        self.use_msss = use_msss
 
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]
+        dpr = [
+            x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))
+        ]  # stochastic depth decay rule
         cur = 0
 
         for i in range(num_stages):
-            patch_embed = StemConv(in_channels if i == 0 else embed_dims[i - 1], embed_dims[i], norm_cfg=norm_cfg)
+            if i == 0:
+                patch_embed = StemConv(3, embed_dims[0], norm_cfg=norm_cfg)
+            else:
+                patch_embed = OverlapPatchEmbed(
+                    patch_size=7 if i == 0 else 3,
+                    stride=4 if i == 0 else 2,
+                    in_channels=in_channels if i == 0 else embed_dims[i - 1],
+                    embed_dim=embed_dims[i],
+                    norm_cfg=norm_cfg)
 
             block = nn.ModuleList([
                 MSCABlock(
                     channels=embed_dims[i],
+                    attention_kernel_sizes=attention_kernel_sizes,
+                    attention_kernel_paddings=attention_kernel_paddings,
                     mlp_ratio=mlp_ratios[i],
                     drop=drop_rate,
                     drop_path=dpr[cur + j],
                     act_cfg=act_cfg,
-                    norm_cfg=norm_cfg,
-                    num_groups=num_groups,
-                    kernel_size=kernel_size,
-                    dilation=dilation,
-                    use_1x1_after_shift=use_1x1_after_shift,
-                    shift_offsets=shift_offsets
-                ) for j in range(depths[i])
+                    norm_cfg=norm_cfg, use_msss=self.use_msss) for j in range(depths[i])
             ])
-
             norm = nn.LayerNorm(embed_dims[i])
             cur += depths[i]
 
@@ -460,7 +491,28 @@ class MSCANGroupShift(BaseModule):
             setattr(self, f'block{i + 1}', block)
             setattr(self, f'norm{i + 1}', norm)
 
+    def init_weights(self):
+        """Initialize modules of MSCAN."""
+
+        print('init cfg', self.init_cfg)
+        if self.init_cfg is None:
+            for m in self.modules():
+                if isinstance(m, nn.Linear):
+                    trunc_normal_init(m, std=.02, bias=0.)
+                elif isinstance(m, nn.LayerNorm):
+                    constant_init(m, val=1.0, bias=0.)
+                elif isinstance(m, nn.Conv2d):
+                    fan_out = m.kernel_size[0] * m.kernel_size[
+                        1] * m.out_channels
+                    fan_out //= m.groups
+                    normal_init(
+                        m, mean=0, std=math.sqrt(2.0 / fan_out), bias=0)
+        else:
+            super().init_weights()
+
     def forward(self, x):
+        """Forward function."""
+
         B = x.shape[0]
         outs = []
 
@@ -474,8 +526,5 @@ class MSCANGroupShift(BaseModule):
             x = norm(x)
             x = x.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
             outs.append(x)
-
-        # Debugging logs
-        # print(f"Stage Outputs: {[out.shape for out in outs]}")
 
         return outs
