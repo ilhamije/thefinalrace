@@ -1,12 +1,12 @@
 nohup: ignoring input
-03/22 16:42:56 - mmengine - INFO - 
+03/22 01:22:05 - mmengine - INFO - 
 ------------------------------------------------------------
 System environment:
     sys.platform: linux
     Python: 3.10.12 (main, Feb  4 2025, 14:57:36) [GCC 11.4.0]
     CUDA available: True
     MUSA available: False
-    numpy_random_seed: 430875767
+    numpy_random_seed: 2085106131
     GPU 0,1,2,3: NVIDIA GeForce RTX 3090
     CUDA_HOME: /usr/local/cuda
     NVCC: Cuda compilation tools, release 12.4, V12.4.131
@@ -36,14 +36,14 @@ Runtime environment:
     mp_cfg: {'mp_start_method': 'fork', 'opencv_num_threads': 0}
     dist_cfg: {'backend': 'nccl'}
     gpus: 2
-    seed: 430875767
+    seed: 2085106131
     Distributed launcher: none
     Distributed training: False
     GPU number: 1
 ------------------------------------------------------------
 
-03/22 16:42:57 - mmengine - INFO - Config:
-checkpoint_file = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segnext/mscan_t_20230227-119e8c9f.pth'
+03/22 01:22:05 - mmengine - INFO - Config:
+checkpoint = 'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b0_20220624-7e0fe6dd.pth'
 crop_size = (
     512,
     512,
@@ -66,7 +66,6 @@ data_preprocessor = dict(
         57.12,
         57.375,
     ],
-    test_cfg=dict(size_divisor=32),
     type='SegDataPreProcessor')
 data_root = 'data/rescuenet/'
 dataset_type = 'RescueNetDataset'
@@ -87,7 +86,6 @@ gpu_ids = [
     0,
     1,
 ]
-ham_norm_cfg = dict(num_groups=32, requires_grad=True, type='GN')
 img_ratios = [
     0.5,
     0.75,
@@ -101,68 +99,54 @@ img_scale = (
     1125,
 )
 launcher = 'none'
-load_from = 'work_dirs/RTX3090_segnext_mscan-t_1xb16-adamw-160k_rescuenet-512x512/iter_160000.pth'
+load_from = 'work_dirs/RTX3090_segformer_mit-b0_8xb2-160k_rescuenet-512x512/iter_160000.pth'
 log_level = 'INFO'
 log_processor = dict(by_epoch=False)
 model = dict(
     backbone=dict(
-        act_cfg=dict(type='GELU'),
-        attention_kernel_paddings=[
-            2,
-            [
-                0,
-                3,
-            ],
-            [
-                0,
-                5,
-            ],
-            [
-                0,
-                10,
-            ],
-        ],
-        attention_kernel_sizes=[
-            5,
-            [
-                1,
-                7,
-            ],
-            [
-                1,
-                11,
-            ],
-            [
-                1,
-                21,
-            ],
-        ],
-        depths=[
-            3,
-            3,
-            5,
-            2,
-        ],
+        attn_drop_rate=0.0,
         drop_path_rate=0.1,
         drop_rate=0.0,
-        embed_dims=[
-            32,
-            64,
-            160,
-            256,
-        ],
+        embed_dims=32,
+        in_channels=3,
         init_cfg=dict(
             checkpoint=
-            'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segnext/mscan_t_20230227-119e8c9f.pth',
+            'https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/segformer/mit_b0_20220624-7e0fe6dd.pth',
             type='Pretrained'),
-        mlp_ratios=[
+        mlp_ratio=4,
+        num_heads=[
+            1,
+            2,
+            5,
             8,
-            8,
-            4,
-            4,
         ],
-        norm_cfg=dict(requires_grad=True, type='BN'),
-        type='MSCAN'),
+        num_layers=[
+            2,
+            2,
+            2,
+            2,
+        ],
+        num_stages=4,
+        out_indices=(
+            0,
+            1,
+            2,
+            3,
+        ),
+        patch_sizes=[
+            7,
+            3,
+            3,
+            3,
+        ],
+        qkv_bias=True,
+        sr_ratios=[
+            8,
+            4,
+            2,
+            1,
+        ],
+        type='MixVisionTransformer'),
     data_preprocessor=dict(
         bgr_to_rgb=True,
         mean=[
@@ -181,48 +165,45 @@ model = dict(
             57.12,
             57.375,
         ],
-        test_cfg=dict(size_divisor=32),
         type='SegDataPreProcessor'),
     decode_head=dict(
         align_corners=False,
         channels=256,
         dropout_ratio=0.1,
-        ham_channels=256,
-        ham_kwargs=dict(
-            MD_R=16,
-            MD_S=1,
-            eval_steps=7,
-            inv_t=100,
-            rand_init=True,
-            train_steps=6),
         in_channels=[
+            32,
             64,
             160,
             256,
         ],
         in_index=[
+            0,
             1,
             2,
             3,
         ],
         loss_decode=dict(
-            avg_non_ignore=True,
-            loss_weight=1.0,
-            type='CrossEntropyLoss',
-            use_sigmoid=False),
-        norm_cfg=dict(num_groups=32, requires_grad=True, type='GN'),
-        num_classes=11,
-        type='LightHamHead'),
+            loss_weight=1.0, type='CrossEntropyLoss', use_sigmoid=False),
+        norm_cfg=dict(requires_grad=True, type='SyncBN'),
+        num_classes=19,
+        type='SegformerHead'),
     pretrained=None,
-    test_cfg=dict(mode='whole'),
-    train_cfg=dict(),
+    test_cfg=dict(crop_size=(
+        512,
+        512,
+    ), mode='slide', stride=(
+        318,
+        318,
+    )),
+    train_cfg=dict(find_unused_parameters=True),
     type='EncoderDecoder')
+norm_cfg = dict(requires_grad=True, type='SyncBN')
 optim_wrapper = dict(
     optimizer=dict(
         betas=(
             0.9,
             0.999,
-        ), lr=0.00024, type='AdamW', weight_decay=0.01),
+        ), lr=0.00018, type='AdamW', weight_decay=0.01),
     paramwise_cfg=dict(
         custom_keys=dict(
             head=dict(lr_mult=10.0),
@@ -245,7 +226,7 @@ param_scheduler = [
 resume = False
 test_cfg = dict(type='TestLoop')
 test_dataloader = dict(
-    batch_size=4,
+    batch_size=2,
     dataset=dict(
         data_prefix=dict(img_path='img_dir/test', seg_map_path='ann_dir/test'),
         data_root='data/rescuenet/',
@@ -259,13 +240,17 @@ test_dataloader = dict(
             dict(type='PackSegInputs'),
         ],
         type='RescueNetDataset'),
-    num_workers=1,
-    persistent_workers=False,
+    num_workers=4,
+    persistent_workers=True,
     sampler=dict(shuffle=False, type='DefaultSampler'))
 test_evaluator = dict(
-    compute_loss=True, iou_metrics=[
+    iou_metrics=[
         'mIoU',
-    ], type='IoUMetric')
+    ],
+    keep_results=True,
+    output_dir=
+    'work_results/pred_result-RTX3090_segformer_mit-b0_8xb2-160k_rescuenet-512x512.pkl',
+    type='IoUMetric')
 test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(keep_ratio=False, scale=(
@@ -278,7 +263,7 @@ test_pipeline = [
 train_cfg = dict(
     max_iters=160000, type='IterBasedTrainLoop', val_interval=16000)
 train_dataloader = dict(
-    batch_size=8,
+    batch_size=2,
     dataset=dict(
         data_prefix=dict(
             img_path='img_dir/train', seg_map_path='ann_dir/train'),
@@ -347,7 +332,7 @@ tta_pipeline = [
 ]
 val_cfg = dict(type='ValLoop')
 val_dataloader = dict(
-    batch_size=4,
+    batch_size=2,
     dataset=dict(
         data_prefix=dict(img_path='img_dir/val', seg_map_path='ann_dir/val'),
         data_root='data/rescuenet/',
@@ -361,20 +346,28 @@ val_dataloader = dict(
             dict(type='PackSegInputs'),
         ],
         type='RescueNetDataset'),
-    num_workers=1,
-    persistent_workers=False,
+    num_workers=4,
+    persistent_workers=True,
     sampler=dict(shuffle=False, type='DefaultSampler'))
 val_evaluator = dict(
-    compute_loss=True, iou_metrics=[
+    iou_metrics=[
         'mIoU',
     ], type='IoUMetric')
-vis_backends = []
+vis_backends = [
+    dict(type='LocalVisBackend'),
+]
 visualizer = dict(
-    name='visualizer', type='SegLocalVisualizer', vis_backends=[])
-work_dir = './work_dirs/RTX3090_segnext_mscan-t_1xb16-adamw-160k_rescuenet-512x512'
+    name='visualizer',
+    type='SegLocalVisualizer',
+    vis_backends=[
+        dict(type='LocalVisBackend'),
+    ])
+work_dir = './work_dirs/RTX3090_segformer_mit-b0_8xb2-160k_rescuenet-512x512'
 
-03/22 16:43:00 - mmengine - INFO - Distributed training is not used, all SyncBatchNorm (SyncBN) layers in the model will be automatically reverted to BatchNormXd layers if they are used.
-03/22 16:43:00 - mmengine - INFO - Hooks will be executed in the following order:
+/workspace/thefinalrace/mmseg/models/losses/cross_entropy_loss.py:250: UserWarning: Default ``avg_non_ignore`` is False, if you would like to ignore the certain label and average loss over non-ignore labels, which is the same with PyTorch official cross_entropy, set ``avg_non_ignore=True``.
+  warnings.warn(
+03/22 01:22:08 - mmengine - INFO - Distributed training is not used, all SyncBatchNorm (SyncBN) layers in the model will be automatically reverted to BatchNormXd layers if they are used.
+03/22 01:22:08 - mmengine - INFO - Hooks will be executed in the following order:
 before_run:
 (VERY_HIGH   ) RuntimeInfoHook                    
 (BELOW_NORMAL) LoggerHook                         
@@ -458,27 +451,21 @@ after_test:
 after_run:
 (BELOW_NORMAL) LoggerHook                         
  -------------------- 
-03/22 16:43:00 - mmengine - WARNING - The prefix is not set in metric class IoUMetric.
-Loads checkpoint by local backend from path: work_dirs/RTX3090_segnext_mscan-t_1xb16-adamw-160k_rescuenet-512x512/iter_160000.pth
-03/22 16:43:01 - mmengine - INFO - Load checkpoint from work_dirs/RTX3090_segnext_mscan-t_1xb16-adamw-160k_rescuenet-512x512/iter_160000.pth
-03/22 18:27:54 - mmengine - INFO - Iter(test) [ 50/113]    eta: 2:09:26  time: 111.4892  data_time: 111.2247  memory: 17450  
-03/22 19:32:47 - mmengine - WARNING - Image shapes are different in the batch.
-03/22 20:13:47 - mmengine - INFO - Iter(test) [100/113]    eta: 0:27:08  time: 131.1175  data_time: 130.8322  memory: 3238  
-03/22 20:42:37 - mmengine - INFO - per class results:
-03/22 20:42:37 - mmengine - INFO - 
-+----------------------------+-------+-------+
-|           Class            |  IoU  |  Acc  |
-+----------------------------+-------+-------+
-|         background         | 74.45 | 83.57 |
-|           water            |  83.7 | 93.26 |
-|     building-no-damage     | 68.74 | 81.28 |
-|   building-medium-damage   | 60.19 | 73.58 |
-|   building-major-damage    | 60.57 | 82.62 |
-| building-total-destruction | 61.67 | 74.37 |
-|          vehicle           |  66.2 | 78.33 |
-|         road-clear         | 79.82 | 88.96 |
-|        road-blocked        | 83.76 | 92.05 |
-|            tree            | 79.21 | 83.79 |
-|            pool            | 82.96 | 91.96 |
-+----------------------------+-------+-------+
-03/22 20:42:37 - mmengine - INFO - Iter(test) [113/113]    aAcc: 87.7800  mIoU: 72.8400  mAcc: 83.9800  data_time: 126.3005  time: 126.6239
+03/22 01:22:09 - mmengine - WARNING - The prefix is not set in metric class IoUMetric.
+Loads checkpoint by local backend from path: work_dirs/RTX3090_segformer_mit-b0_8xb2-160k_rescuenet-512x512/iter_160000.pth
+03/22 01:22:09 - mmengine - INFO - Load checkpoint from work_dirs/RTX3090_segformer_mit-b0_8xb2-160k_rescuenet-512x512/iter_160000.pth
+Image size: torch.Size([1125, 1500])
+Input 0 shape[1:]: torch.Size([1125, 1500])
+Input 1 shape[1:]: torch.Size([1125, 1500])
+Image size: torch.Size([1125, 1500])
+Input 0 shape[1:]: torch.Size([1125, 1500])
+Input 1 shape[1:]: torch.Size([1125, 1500])
+Image size: torch.Size([1125, 1500])
+Input 0 shape[1:]: torch.Size([1125, 1500])
+Input 1 shape[1:]: torch.Size([1125, 1500])
+Image size: torch.Size([1125, 1500])
+Input 0 shape[1:]: torch.Size([1125, 1500])
+Input 1 shape[1:]: torch.Size([1125, 1500])
+Image size: torch.Size([1125, 1500])
+Input 0 shape[1:]: torch.Size([1125, 1500])
+Input 1 shape[1:]: torch.Size([1125, 1500])

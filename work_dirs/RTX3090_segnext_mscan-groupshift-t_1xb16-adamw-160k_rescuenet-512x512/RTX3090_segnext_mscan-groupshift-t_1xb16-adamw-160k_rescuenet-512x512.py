@@ -26,8 +26,8 @@ data_preprocessor = dict(
 data_root = 'data/rescuenet/'
 dataset_type = 'RescueNetDataset'
 default_hooks = dict(
-    checkpoint=dict(by_epoch=False, interval=10000, type='CheckpointHook'),
-    logger=dict(interval=100, log_metric_by_epoch=False, type='LoggerHook'),
+    checkpoint=dict(by_epoch=False, interval=16000, type='CheckpointHook'),
+    logger=dict(interval=50, log_metric_by_epoch=False, type='LoggerHook'),
     param_scheduler=dict(type='ParamSchedulerHook'),
     sampler_seed=dict(type='DistSamplerSeedHook'),
     timer=dict(type='IterTimerHook'),
@@ -55,43 +55,13 @@ img_scale = (
     1500,
     1125,
 )
-launcher = 'none'
-load_from = 'work_dirs/segnext_mscan-t_1xb16-adamw-40k_rescuenet-512x512/iter_20000.pth'
+launcher = 'pytorch'
+load_from = None
 log_level = 'INFO'
 log_processor = dict(by_epoch=False)
 model = dict(
     backbone=dict(
         act_cfg=dict(type='GELU'),
-        attention_kernel_paddings=[
-            2,
-            [
-                0,
-                3,
-            ],
-            [
-                0,
-                5,
-            ],
-            [
-                0,
-                10,
-            ],
-        ],
-        attention_kernel_sizes=[
-            5,
-            [
-                1,
-                7,
-            ],
-            [
-                1,
-                11,
-            ],
-            [
-                1,
-                21,
-            ],
-        ],
         depths=[
             3,
             3,
@@ -116,8 +86,8 @@ model = dict(
             4,
             4,
         ],
-        norm_cfg=dict(requires_grad=True, type='BN'),
-        type='MSCAN'),
+        norm_cfg=dict(requires_grad=True, type='SyncBN'),
+        type='MSCANGroupShift'),
     data_preprocessor=dict(
         bgr_to_rgb=True,
         mean=[
@@ -177,7 +147,7 @@ optim_wrapper = dict(
         betas=(
             0.9,
             0.999,
-        ), lr=6e-05, type='AdamW', weight_decay=0.01),
+        ), lr=0.00024, type='AdamW', weight_decay=0.01),
     paramwise_cfg=dict(
         custom_keys=dict(
             head=dict(lr_mult=10.0),
@@ -197,7 +167,7 @@ param_scheduler = [
         power=1.0,
         type='PolyLR'),
 ]
-resume = False
+resume = True
 test_cfg = dict(type='TestLoop')
 test_dataloader = dict(
     batch_size=4,
@@ -222,15 +192,9 @@ test_dataloader = dict(
     persistent_workers=False,
     sampler=dict(shuffle=False, type='DefaultSampler'))
 test_evaluator = dict(
-    compute_loss=True,
-    iou_metrics=[
+    compute_loss=True, iou_metrics=[
         'mIoU',
-        'mFscore',
-    ],
-    keep_results=True,
-    output_dir=
-    'result/pred_result_segnext_mscan-t_1xb16-adamw-40k_rescuenet-512x512',
-    type='IoUMetric')
+    ], type='IoUMetric')
 test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(keep_ratio=False, scale=(
@@ -245,9 +209,9 @@ test_pipeline = [
     dict(type='PackSegInputs'),
 ]
 train_cfg = dict(
-    max_iters=40000, type='IterBasedTrainLoop', val_interval=10000)
+    max_iters=160000, type='IterBasedTrainLoop', val_interval=16000)
 train_dataloader = dict(
-    batch_size=8,
+    batch_size=16,
     dataset=dict(
         data_prefix=dict(
             img_path='img_dir/train', seg_map_path='ann_dir/train'),
@@ -281,10 +245,12 @@ train_dataloader = dict(
             dict(type='PackSegInputs'),
         ],
         type='RescueNetDataset'),
-    num_workers=1,
+    drop_last=True,
+    num_workers=8,
     persistent_workers=True,
     pin_memory=True,
-    sampler=dict(shuffle=True, type='InfiniteSampler'))
+    prefetch_factor=4,
+    sampler=dict(shuffle=True, type='DefaultSampler'))
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(reduce_zero_label=True, type='LoadAnnotations'),
@@ -365,9 +331,8 @@ val_dataloader = dict(
 val_evaluator = dict(
     compute_loss=True, iou_metrics=[
         'mIoU',
-        'mFscore',
     ], type='IoUMetric')
 vis_backends = []
 visualizer = dict(
     name='visualizer', type='SegLocalVisualizer', vis_backends=[])
-work_dir = './work_dirs/segnext_mscan-t_1xb16-adamw-40k_rescuenet-512x512'
+work_dir = 'work_dirs/RTX3090_segnext_mscan-groupshift-t_1xb16-adamw-160k_rescuenet-512x512'
