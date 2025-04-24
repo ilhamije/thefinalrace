@@ -10,14 +10,19 @@ train_pipeline = [
         scale=(2048, 512),
         ratio_range=(0.5, 2.0),
         keep_ratio=True),
-    dict(type='RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
+    dict(type='RandomCrop', crop_size=(512, 512), cat_max_ratio=0.75),
     dict(type='RandomFlip', prob=0.5),
     dict(type='PhotoMetricDistortion'),
+
+    # ✅ Add this line to fix shape inconsistency
+    dict(type='Resize', scale=(512, 512), keep_ratio=False),
     dict(type='PackSegInputs')
 ]
+
 test_pipeline = [
     dict(type='LoadImageFromFile'),
-    dict(type='Resize', scale=(2048, 512), keep_ratio=True),
+    # dict(type='Resize', scale=(2048, 512), keep_ratio=True),
+    dict(type='Resize', scale=(512, 512), keep_ratio=False),  # ✅ Enforce same size
     # add loading annotation after ``Resize`` because ground truth
     # does not need to do resize data transform
     dict(type='LoadAnnotations', reduce_zero_label=True),
@@ -64,5 +69,5 @@ val_dataloader = dict(
         pipeline=test_pipeline))
 test_dataloader = val_dataloader
 
-val_evaluator = dict(type='IoUMetric', iou_metrics=['mIoU'])
+val_evaluator = dict(type='IoUMetric', iou_metrics=['mIoU', 'mFscore'])
 test_evaluator = val_evaluator
